@@ -330,6 +330,8 @@ if [ -f build/gen/felucca_tables.h ]; then
     run "audio: overload protection, bounded fades and DMA diagnostics" "$OUT/audio_test"
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/click_test" tests/click_test.c -lm
     run "metronome and count-in: beats sample for sample (internal and external clock), accent, level, MASTER, not in USB, count-in timing, notes onto step 1" "$OUT/click_test"
+    $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/clockout_test" tests/clockout_test.c -lm
+    run "CLOCK OUT (1.6.2): Start, 24 pulses per quarter note within a block at 30 / 120 / 300 BPM, tempo change, Stop, restart, external clock, no host" "$OUT/clockout_test"
     $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/persistence_test" tests/persistence_test.c -lm
     run "persistence: deferred settings, retry and failed-save rollback" "$OUT/persistence_test"
     $CC -w -Ibuild/gen -Ifirmware/src -o "$OUT/backup_test" tests/backup_test.c -lm

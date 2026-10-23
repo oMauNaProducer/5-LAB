@@ -40,6 +40,8 @@ static const uint8_t ED_MENU[][2] = {
     {MI_CPU2, 32},                                     /* 1.6.1, the second core (Discussion #141): 2ND CORE OFF / ON (BETA),
                                                         * SYSTEM, from the next power-on (a FELUCCA_CPU2=0 build: 0..31) */
 #endif
+    {MI_CLKOUT, 33},                                   /* 1.6.2: CLOCK OUT OFF / ON, SYSTEM: MIDI clock and Start / Stop on
+                                                        * USB MIDI while the song plays on its own clock (seq.c) */
 };
 #define ED_MENU_N NELEM(ED_MENU)
 
