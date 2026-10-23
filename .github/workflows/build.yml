@@ -1,4 +1,4 @@
-name: Build firmware and site
+name: LAB-4T build
 on:
   push:
   workflow_dispatch:
@@ -26,6 +26,9 @@ jobs:
             https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git ~/fw-AC79_AIoT_SDK
       - name: Firmware
         run: ./build.sh
+      - name: Host tests (the sound must not change)
+        run: sh tests/ci_quick.sh
+        continue-on-error: true
       - name: Emscripten
         uses: mymindstorm/setup-emsdk@v14
       - name: Browser emulator
@@ -33,7 +36,7 @@ jobs:
       - name: Site (installer, editor, firmware)
         run: |
           VER=$(sed -n 's/^#define FELUCCA_VERSION "\([^"]*\)".*/\1/p' firmware/src/felucca.c | head -n 1)
-          python3 web/make_site.py build/felucca.fwsc "$VER-clockout" _site
+          python3 web/make_site.py build/felucca.fwsc "$VER" _site
           mkdir -p _site/webapp/try
           cp -r build/emu/. _site/webapp/try/
       - uses: actions/upload-artifact@v4

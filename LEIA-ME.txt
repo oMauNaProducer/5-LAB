@@ -1,4 +1,1 @@
-Extraia este zip POR CIMA da pasta do clone do Felucca (aceite substituir). Nao mexa em firmware/engines.
-Novos: .github/workflows/build.yml, tests/clockout_test.c, tests/clocksm_test.c
-Substituidos: firmware/src/{editor_menu,menu_items,midi_clock,project,seq,settings_persist,ui,ui_input,ui_menu}.c,
-  web/EDITOR_PROTOCOL.md, tests/{editor_test.c,run_tests.sh,ui_test.c}
+LAB-4T v0.6. Extraia este zip POR CIMA da pasta do clone (aceite substituir). Nao mexa em firmware/engines.
