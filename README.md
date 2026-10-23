@@ -17,10 +17,10 @@ Thank you for everything. I hope you’ll look forward to my next creations.
 Multi-engine synthesizer firmware for the M-VAVE FM-1, version 1.6.1. Connect the FM-1 to a computer by USB, open the
 [web installer](https://hugelton.github.io/Felucca/) in Chrome or Edge and press Install; no extra hardware is needed.
 Installing is at your own risk: M-VAVE's updater or the installer's **Return to official V15** takes you back.
-[Try it in your browser](https://omaunaproducer.github.io/FeluccaL4/webapp/try/), no FM-1 needed.
+[Try it in your browser](https://omaunaproducer.github.io/LAB-4T/webapp/try/), no FM-1 needed.
 
-- Install: [web installer](https://omaunaproducer.github.io/FeluccaL4/)
-- Edit: [web editor](https://omaunaproducer.github.io/FeluccaL4/webapp/editor/) ([Felucca-WebApp](https://github.com/hugelton/Felucca-WebApp))
+- Install: [web installer](https://omaunaproducer.github.io/LAB-4T/)
+- Edit: [web editor](https://omaunaproducer.github.io/LAB-4T/webapp/editor/) ([Felucca-WebApp](https://github.com/hugelton/Felucca-WebApp))
 - Read: the manual and the release notes are in the [wiki](https://github.com/hugelton/Felucca/wiki/Home)
 - Build: [BUILDING.md](BUILDING.md)
 - Related: [Felucca-Engines](https://github.com/hugelton/Felucca-Engines) (the ANALOG, LOFI, TRIO, WHEEL and NOISE engines, MIT; still maintained) ·
