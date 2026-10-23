@@ -29,7 +29,7 @@ jobs:
       - name: Emscripten
         uses: mymindstorm/setup-emsdk@v14
       - name: Browser emulator
-        run: web/emu/build.sh
+        run: sh web/emu/build.sh
       - name: Site (installer, editor, firmware)
         run: |
           VER=$(sed -n 's/^#define FELUCCA_VERSION "\([^"]*\)".*/\1/p' firmware/src/felucca.c | head -n 1)
