@@ -11,7 +11,8 @@
  * [15][24]: MENU's 1.2 flags SCOPE MIX, STEP PREVIEW ON, CHORD ENTRY ADD (bits 0-2, ui.c ui_prefs2; 0 = the defaults),
  *   1.5 HELP ON (bit 3), 1.5.5 SELECT PAGE (bit 4; 0 = BPM, as before), 1.5.5 SCREEN WAKE PANEL (bit 5; 0 = +MIDI);
  *   1.6.1 2ND CORE ON (bit 7; 0 = OFF, one core, as before);
- * [15][13]: MENU > SYSTEM > CLOCK OUT (1.6.2, ui.c ui_clkout: 0 OFF, 1 ON; seq.c sends MIDI clock on USB MIDI);
+ * [15][13]: MENU > SYSTEM > CLOCK OUT (1.6.2, ui.c ui_clkout: bit 0 0 OFF, 1 ON; seq.c sends MIDI clock on USB MIDI);
+ *   bits 1-2: CLK, the clock the FM-1 follows (0 INT, 1 USB, 2 TRS: song.g[G_CLOCK], ui_input.c clk_sync; 0 = INT as before);
  * [15][10]: MENU > ANIM IDLE (1.2, Discussion #135, ui.c ui_idle: bit 0; 0 = off, ANIM as its bit in MENU's flags says);
  * [15][11]: PRESETS > LIST's category (1.2, Discussion #90, ui.c ui_lcat: 0 none = ALL / FAV as favorites.filter says);
  * [15][0..9], [12] (1.6, #244: CUSTOM, a palette of the user's: five RGB565 colours little endian, flags: ui.c ui_cpal); older
@@ -53,8 +54,12 @@ static int settings_import(persist_t *p, int n)
                 b &= ~(3u << (2u * f));
         p->favorites.factory[15][28] = (uint8_t)b;
     }
-    if (p->favorites.factory[15][13] > 1u)         /* CLOCK OUT (1.6.2, ui.c ui_clkout): unknown = OFF */
-        p->favorites.factory[15][13] = 0;
+    {   /* CLOCK OUT (1.6.2, ui.c ui_clkout): bit 0 ON; bits 1-2 CLK (INT USB TRS, kept past a power-off); unknown = default */
+        uint8_t c = (uint8_t)(p->favorites.factory[15][13] & 7u);
+        if (((c >> 1) & 3u) == 3u)
+            c &= 1u;
+        p->favorites.factory[15][13] = c;
+    }
     if (p->favorites.factory[15][27] > 7u)         /* SCREEN OFF (1.1.5, ui.c SCR_CODE): unknown = 0 (NEVER since 1.1.5.1) */
         p->favorites.factory[15][27] = 0;
     if (p->favorites.factory[15][11] > 8u)         /* PRESETS LIST's category (1.2, ui.c ui_lcat, CAT_*): unknown = none */

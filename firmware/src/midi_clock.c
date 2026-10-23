@@ -6,6 +6,8 @@ static struct {
     uint32_t pos, rendered, last_ms, start_ms, rem, interval_ms;
     uint32_t pulse_samples, interp_q8, tempo_ms;
     uint8_t mode, have_pulse, tempo_valid, tempo_n;
+    uint8_t sm_n, sm_i;                            /* (1.6.2) the quarter beats' lengths kept (qdt[], up to 8, sm_i the next) */
+    uint16_t qdt[8];
 } midi_clock;
 
 static __attribute__((noinline)) void midi_clock_transport(uint32_t status, uint32_t ms)
@@ -15,6 +17,7 @@ static __attribute__((noinline)) void midi_clock_transport(uint32_t status, uint
         midi_clock.have_pulse = midi_clock.tempo_valid = 0;
         midi_clock.interval_ms = 0;
         midi_clock.start_ms = ms;
+        midi_clock.sm_n = 0;
         seq_start();
     } else if (status == 0xFBu) {                  /* Continue: preserve the step */
         midi_clock.pos = midi_clock.rendered;
@@ -22,6 +25,7 @@ static __attribute__((noinline)) void midi_clock_transport(uint32_t status, uint
         midi_clock.have_pulse = midi_clock.tempo_valid = 0;
         midi_clock.interval_ms = 0;
         midi_clock.start_ms = ms;
+        midi_clock.sm_n = 0;
         if (!song.playing)
             motion_begin();
         song.playing = 1;
@@ -43,26 +47,45 @@ static __attribute__((noinline)) void midi_clock_pulse(uint32_t ms)
         midi_clock.tempo_n = 0;
         /* Six clocks are a quarter of a beat. Reject gaps and corrupt bursts. */
         if (dt >= 62u && dt <= 375u) {
-            uint32_t old_beat = beat_samples(), new_beat = (uint32_t)FS * dt / 250u;
-            if (song.playing && new_beat != old_beat) {
-                uint32_t i, ratio = (new_beat << 12) / old_beat;
-                /* Preserve each track's fractional step phase when the master
-                 * changes tempo. The next pulse then lands on its new boundary. */
-                for (i = 0; i < NTRK; i++) {
-                    if (trk[i].seq_pos < (uint32_t)FS * 2u)
-                        trk[i].seq_pos = (uint32_t)(((uint64_t)trk[i].seq_pos * ratio + 2048u) >> 12);
-                    if (trk[i].seq_off)
-                        trk[i].seq_off = (uint32_t)(((uint64_t)trk[i].seq_off * ratio + 2048u) >> 12);
-                    if (trk[i].nd_late)            /* (NUDGE: the latched plays, seq_pos + 1, with the step) */
-                        trk[i].nd_late = (uint32_t)(((uint64_t)(trk[i].nd_late - 1u) * ratio + 2048u) >> 12) + 1u;
-                    if (trk[i].nd_early)
-                        trk[i].nd_early = (uint32_t)(((uint64_t)(trk[i].nd_early - 1u) * ratio + 2048u) >> 12) + 1u;
+            /* 1.6.2 (after SLOOP 2.7.2, mclk_tempo): a quarter beat timed to the millisecond reads +-1 BPM at random
+             * (140: 107.1 ms), and the delay, the arp and the slicer follow it. So: the mean of the last 8 quarter
+             * beats; once there are 8, the tempo changes only when the mean is 0.8 BPM away (a steady 140 stays 140; a
+             * ramp still goes through). A quarter 5 BPM or more away is a new tempo: taken at once (the 8 start again).
+             * The sequencer follows the pulses either way */
+            uint32_t k, sum = 0, t10, old_beat = beat_samples(), n;
+            int32_t one = (int32_t)((15000u + dt / 2u) / dt), cur = song.g[G_BPM];
+            if (midi_clock.sm_n && (one - cur >= 5 || cur - one >= 5))
+                midi_clock.sm_n = 0;
+            midi_clock.qdt[midi_clock.sm_i] = (uint16_t)dt;
+            midi_clock.sm_i = (uint8_t)((midi_clock.sm_i + 1u) & 7u);
+            if (midi_clock.sm_n < 8u)
+                midi_clock.sm_n++;
+            n = midi_clock.sm_n;
+            for (k = 0; k < n; k++)
+                sum += midi_clock.qdt[(midi_clock.sm_i + 8u - 1u - k) & 7u];
+            t10 = (150000u * n + sum / 2u) / sum;      /* (tenths of a BPM: <= 8 x 150000 + 1500) */
+            if (n < 8u || (int32_t)t10 - cur * 10 >= 8 || cur * 10 - (int32_t)t10 >= 8) {
+                uint32_t new_beat = (uint32_t)FS * sum / (250u * n);
+                if (song.playing && new_beat != old_beat) {
+                    uint32_t i, ratio = (new_beat << 12) / old_beat;
+                    /* Preserve each track's fractional step phase when the master
+                     * changes tempo. The next pulse then lands on its new boundary. */
+                    for (i = 0; i < NTRK; i++) {
+                        if (trk[i].seq_pos < (uint32_t)FS * 2u)
+                            trk[i].seq_pos = (uint32_t)(((uint64_t)trk[i].seq_pos * ratio + 2048u) >> 12);
+                        if (trk[i].seq_off)
+                            trk[i].seq_off = (uint32_t)(((uint64_t)trk[i].seq_off * ratio + 2048u) >> 12);
+                        if (trk[i].nd_late)            /* (NUDGE: the latched plays, seq_pos + 1, with the step) */
+                            trk[i].nd_late = (uint32_t)(((uint64_t)(trk[i].nd_late - 1u) * ratio + 2048u) >> 12) + 1u;
+                        if (trk[i].nd_early)
+                            trk[i].nd_early = (uint32_t)(((uint64_t)(trk[i].nd_early - 1u) * ratio + 2048u) >> 12) + 1u;
+                    }
+                    if (clk_pos < (uint32_t)FS * 2u)   /* (the metronome's beat as the steps) */
+                        clk_pos = (uint32_t)(((uint64_t)clk_pos * ratio + 2048u) >> 12);
                 }
-                if (clk_pos < (uint32_t)FS * 2u)   /* (the metronome's beat as the steps) */
-                    clk_pos = (uint32_t)(((uint64_t)clk_pos * ratio + 2048u) >> 12);
+                midi_beat_samples = new_beat;
+                song.g[G_BPM] = (int16_t)clamp((int32_t)((t10 + 5u) / 10u), 40, 240);
             }
-            midi_beat_samples = new_beat;
-            song.g[G_BPM] = (int16_t)clamp((int32_t)((15000u + dt / 2u) / dt), 40, 240);
         }
     }
     if (song.playing) {

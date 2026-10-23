@@ -1073,8 +1073,8 @@ static int project_restore_runtime(const project_t *input)
     motion_base_valid = 0;
     ui.song_row = 0;
     for (i = 0; i < G_COUNT; i++)
-        if (i != G_SLOT && i != G_LOAD && i != G_SAVE)
-            song.g[i] = (int16_t)clamp(p->g[i], GP[i].min, GP[i].max);
+        if (i != G_SLOT && i != G_LOAD && i != G_SAVE && i != G_CLOCK)   /* (1.6.2: CLK is a setting of the FM-1, not of the */
+            song.g[i] = (int16_t)clamp(p->g[i], GP[i].min, GP[i].max);   /* project: ui_input.c clk_sync keeps it) */
     for (k = 0; k < NTRK; k++)                          /* MIDI IN TRACK's channels (1.5.5; 0, channels 1..4, before) */
         song.mch[k] = (uint8_t)(p->mch[k] < MCH_N ? p->mch[k] : 0u);
     midi_route = MIDI_ROUTE_AGAIN;                      /* (events_block: what the channels no longer hear let go) */

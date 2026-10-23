@@ -819,7 +819,7 @@ static void keyboard_block(void)
 
 /* 1.6.2: MENU > SYSTEM > CLOCK OUT. While the song plays on its own (internal) clock, the FM-1 sends MIDI clock on USB
  * MIDI: Start (0xFA) when the sequencer starts, 24 pulses (0xF8) per quarter note of the song tempo, Stop (0xFC) when
- * it stops, so a second FM-1 (or a DAW, a drum machine) set to follow USB clock plays along. The pulses come out of
+ * it stops (and the pulses go on while it is stopped, without a Start, so the other box knows the tempo before PLAY), so a second FM-1 (or a DAW, a drum machine) set to follow USB clock plays along. The pulses come out of
  * events_block, the same place the steps are advanced from, as a count of samples (Q8, so no drift: the tempo is read
  * again at every pulse, a tempo change moves the next one). A pulse leaves in the block it is due in, as the
  * sequencer's own steps do. Start goes out in the block step 0 plays in, with the first pulse after it (the first 0xF8
@@ -836,26 +836,38 @@ static uint32_t clk_out_seen;                 /* the count the last block saw */
 static uint8_t clk_out_run;                   /* 1: Start sent, pulses running */
 static int32_t clk_out_acc;                   /* Q8 samples from the start of the block to the next pulse */
 #define CLK_OUT_PKT(b) (0x0Fu | (uint32_t)(b) << 8)   /* a USB-MIDI packet of one system real-time byte: CIN 0xF */
+static uint8_t clk_out_idle;                  /* 1: pulses running while the song is stopped (no Start sent) */
 static void clock_out_block(uint32_t n)
 {
     int32_t span = (int32_t)(n << 8);
     uint32_t guard, started = clk_out_seen != clk_out_gen;   /* seq_start ran since the last block (any setting) */
-    uint32_t want = clock_out_on && !song.g[G_CLOCK] && song.playing;
+    uint32_t active = clock_out_on && !song.g[G_CLOCK];
     clk_out_seen = clk_out_gen;
-    if (!want) {
-        if (clk_out_run) {
+    if (!active) {
+        if (clk_out_run)
             midi_out_event(CLK_OUT_PKT(0xFCu));
+        clk_out_run = clk_out_idle = 0;
+        return;
+    }
+    if (song.playing) {
+        if (started) {                                  /* a start from the top, or a restart of a song that was playing */
+            midi_out_event(CLK_OUT_PKT(0xFAu));
+            clk_out_run = 1;
+            clk_out_idle = 0;
+            clk_out_acc = 0;                            /* the first pulse with step 0 */
+        }
+        if (!clk_out_run)                               /* turned on mid-song: from the next start from the top */
+            return;
+    } else {                                            /* stopped: the tempo keeps going out, so the other box knows it */
+        if (clk_out_run) {
+            midi_out_event(CLK_OUT_PKT(0xFCu));         /* (the Stop first; the pulses go on) */
             clk_out_run = 0;
         }
-        return;
+        if (!clk_out_idle) {
+            clk_out_idle = 1;
+            clk_out_acc = 0;
+        }
     }
-    if (started) {                                      /* a start from the top, or a restart of a song that was playing */
-        midi_out_event(CLK_OUT_PKT(0xFAu));
-        clk_out_run = 1;
-        clk_out_acc = 0;                                /* the first pulse with step 0 */
-    }
-    if (!clk_out_run)                                   /* turned on mid-song: from the next start from the top */
-        return;
     for (guard = 0; guard < 4u && clk_out_acc < span; guard++) {   /* (4: more than a block holds at 300 BPM) */
         midi_out_event(CLK_OUT_PKT(0xF8u));
         clk_out_acc += (int32_t)((beat_samples() << 8) / 24u);

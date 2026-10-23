@@ -107,7 +107,7 @@ static void setup(uint32_t bpm)
     uint32_t i;
     fresh();
     usb.config = 1; mo_r = mo_w = 0; np = 0;
-    clock_out_on = 0; clk_out_run = 0; clk_out_acc = 0; clk_out_gen = clk_out_seen = 0;
+    clock_out_on = 0; clk_out_run = 0; clk_out_idle = 0; clk_out_acc = 0; clk_out_gen = clk_out_seen = 0;
     trk[0].p[P_SLEN] = 16; trk[0].p[P_SDIV] = 2;
     for (i = 0; i < 16u; i++)
         trk[0].step[i] = (step_t){{(uint8_t)(48 + (i * 7u) % 12u)}, 1, i % 3u ? ST_NOTE : ST_REST, 0, 100};
@@ -146,8 +146,8 @@ static void basics(void)
     check("OFF: still nothing while the song plays", np == 0u && song.playing);
 
     setup(120); clock_out_on = 1; go(10);
-    check("ON, stopped: nothing", np == 0u);
-    transport_req = 1; go(1);
+    check("ON, stopped: pulses already, no Start and no Stop", np >= 1u && count_of(PK_CLOCK, 0) == np);
+    np = 0; transport_req = 1; go(1);
     check("Start in the block the song starts in, the first pulse right after it",
           np == 2u && pk_val[0] == PK_START && pk_val[1] == PK_CLOCK && pk_blk[0] == pk_blk[1]);
     go(44100u * 10u / CTL);
@@ -174,9 +174,11 @@ static void transport(void)
     uint32_t after;
     setup(120); clock_out_on = 1; transport_req = 1; go(3000);
     transport_req = 2; go(1);
-    check("STOP: one Stop, in the block the song stops in", count_of(PK_STOP, 0) == 1u && pk_val[np - 1u] == PK_STOP);
+    check("STOP: one Stop, and nothing but pulses after it", count_of(PK_STOP, 0) == 1u && count_of(PK_START, 0) == 1u);
     after = np; go(3000);
-    check("after the Stop: nothing more", np == after);
+    check("after the Stop: no Start, no second Stop, the pulses go on (2.18 s at 120 BPM: ~104)",
+          count_of(PK_STOP, after) == 0u && count_of(PK_START, after) == 0u &&
+          count_of(PK_CLOCK, after) >= 102u && count_of(PK_CLOCK, after) <= 106u);
 
     setup(120); clock_out_on = 1; transport_req = 1; go(3000); np = 0;
     transport_req = 3; go(1);                          /* GLO + PLAY: from the top without stopping */
@@ -214,6 +216,28 @@ static void tempo(void)
           n1 > 40u && n2 > 40u && d1 * 10u / n1 >= 280u && d1 * 10u / n1 <= 294u && d2 * 10u / n2 >= 187u && d2 * 10u / n2 <= 195u);
 }
 
+static void idle(void)
+{
+    uint32_t n, after; double worst, drift;
+    setup(120); clock_out_on = 1; go(21000);
+    pulse_stats(0, 120, &n, &worst, &drift);
+    check("stopped, 120 BPM, 15.2 s: pulses at the exact time, no drift, no Start / Stop",
+          count_of(PK_START, 0) == 0u && count_of(PK_STOP, 0) == 0u && n >= 730u && n <= 734u &&
+          worst < (double)CTL && drift < (double)CTL);
+    after = np; song.g[G_BPM] = 180; go(3000);
+    pulse_stats(after, 180, &n, &worst, &drift);
+    check("a tempo change while stopped: the pulses follow (180 BPM)", n >= 155u && n <= 160u);
+    after = np; transport_req = 1; go(1);
+    check("PLAY from stopped: Start, then the pulse of the downbeat, as before",
+          pk_val[after] == PK_START && pk_val[after + 1u] == PK_CLOCK && count_of(PK_STOP, after) == 0u);
+    setup(120); clock_out_on = 1; go(2000); after = np; clock_out_on = 0; go(3000);
+    check("CLOCK OUT turned off while stopped: no Stop (nothing was started), and silence", count_of(PK_STOP, 0) == 0u && np == after);
+    setup(120); clock_out_on = 1; song.g[G_CLOCK] = 1; go(3000);
+    check("stopped with an external clock (USB): nothing leaves", np == 0u);
+    setup(120); clock_out_on = 1; usb.config = 0; go(3000);
+    check("stopped, no USB host: nothing queued", mo_r == mo_w && np == 0u);
+}
+
 static void guards(void)
 {
     uint32_t i, flood = 0;
@@ -236,6 +260,7 @@ int main(void)
     basics();
     transport();
     tempo();
+    idle();
     guards();
     printf(bad ? "clockout: %d FAILED\n" : "clockout: all passed\n", bad);
     return bad != 0;

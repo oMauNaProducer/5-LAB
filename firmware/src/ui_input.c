@@ -1490,6 +1490,19 @@ static void ui_input(void)
     fx_usb_fixed = (ui_prefs & PREF_USB_FIXED) != 0u;   /* (MENU > USB LEVEL: fx.c, audio.c) */
     scope_mix = (ui_prefs2 & (PREF_SCOPE_MIX >> 16)) != 0u;   /* (MENU > SCOPE: fx.c, audio.c) */
     clock_out_on = (ui_clkout & 1u) != 0u;              /* (MENU > CLOCK OUT: seq.c; a settings load sets it too) */
+    {   /* 1.6.2: CLK is a setting of the FM-1 (ui_clkout bits 1-2), not of a project: a change made on CLK is kept, a
+         * settings load sets it, a project load leaves it (project.c) */
+        static uint8_t clk_seen;
+        uint32_t want = (ui_clkout >> 1) & 3u, now_g = (uint32_t)song.g[G_CLOCK] & 3u;
+        if (now_g != clk_seen) {
+            clk_seen = (uint8_t)now_g;
+            ui_clkout = (uint8_t)((ui_clkout & 1u) | now_g << 1);
+            settings_later();
+        } else if (want != now_g && want < 3u) {
+            song.g[G_CLOCK] = (int16_t)want;
+            clk_seen = (uint8_t)want;
+        }
+    }
     rp_apply();                                       /* (MENU > CLICK, CLICK LEVEL, COUNT-IN: click.c, seq.c) */
     if (!ui.menu)
         usb_serial_apply();                             /* (MENU > USB SERIAL: when the menu has closed) */

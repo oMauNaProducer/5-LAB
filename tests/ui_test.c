@@ -9271,6 +9271,50 @@ static int test_fx_map_columns(void)
     return bad;
 }
 
+/* 1.6.2: CLK (GLO > SYSTEM, INT USB TRS) is a setting of the FM-1 (ui.c ui_clkout bits 1-2, settings byte [15][13]): a change
+ * is kept in the settings record, a settings load puts it back, a project load leaves it, CLOCK OUT's switch leaves it */
+static int test_clk_persist(void)
+{
+    int bad = 0, ok;
+    persist_t p;
+    static project_t pj;
+    ui_power_on();
+    frame(); frame();
+    ok = song.g[G_CLOCK] == 0 && (ui_clkout >> 1 & 3u) == 0u;
+    song.g[G_CLOCK] = 1; frame();
+    settings_export(&p);
+    ok &= (ui_clkout >> 1 & 3u) == 1u && (p.favorites.factory[15][13] >> 1 & 3u) == 1u;
+    bad += check("1.6.2 CLK: USB set on CLK is written into the settings (byte [15][13], bits 1-2)", ok);
+
+    ui_power_on(); frame();
+    p.favorites.factory[15][13] = 2u << 1;
+    ok = settings_import(&p, sizeof p) == 1; frame();
+    ok &= song.g[G_CLOCK] == 2 && (ui_clkout >> 1 & 3u) == 2u && !clock_out_on;
+    bad += check("... a settings load (power-on) sets CLK again: TRS", ok);
+
+    p.favorites.factory[15][13] = 7u;
+    ok = settings_import(&p, sizeof p) == 1 && (p.favorites.factory[15][13] >> 1 & 3u) != 3u;
+    p.favorites.factory[15][13] = 6u; ok &= settings_import(&p, sizeof p) == 1 && (p.favorites.factory[15][13] >> 1 & 3u) != 3u;
+    p.favorites.factory[15][13] = 0xF0u; ok &= settings_import(&p, sizeof p) == 1 && p.favorites.factory[15][13] == 0u;
+    bad += check("... an impossible value (CLK 3, stray bits) reads as INT; no stray bits kept", ok);
+
+    ui_power_on(); frame();
+    p.favorites.factory[15][13] = 1u << 1;
+    settings_import(&p, sizeof p); frame();
+    project_capture(&pj);
+    pj.g[G_CLOCK] = 0;
+    ok = song.g[G_CLOCK] == 1 && project_restore_runtime(&pj) == 1; frame();
+    ok &= song.g[G_CLOCK] == 1 && (ui_clkout >> 1 & 3u) == 1u;
+    bad += check("... a project load (stored with CLK INT) leaves CLK alone: USB stays", ok);
+
+    menu_put(MI_CLKOUT, 1); frame();
+    ok = song.g[G_CLOCK] == 1 && (ui_clkout & 7u) == 3u && clock_out_on;
+    menu_put(MI_CLKOUT, 0); frame();
+    ok &= song.g[G_CLOCK] == 1 && (ui_clkout & 7u) == 2u && !clock_out_on;
+    bad += check("... CLOCK OUT's switch (ON, OFF) leaves CLK alone", ok);
+    return bad;
+}
+
 /* 1.5 (Discussion #156): HELP. MENU > SYSTEM > HELP (OFF by default, bit 3 of ui_prefs2 alone); every page a button
  * reaches (DIGITAL's retired OP pages aside), HOME, HOME LEVELS, the DRUM grid and every layer has a hint of 2..3 key
  * hints that fits its footer row with every word (cv_key_row drops none); ON: a page entered shows its hint ~2 s, then
@@ -9917,6 +9961,7 @@ int main(void)
     bad += test_home_tracks();
     bad += test_fx_map_columns();
     bad += test_help();
+    bad += test_clk_persist();
     bad += test_no_flash();
 #if FELUCCA_FM4
     bad += test_fm_charts();                        /* (DIGITAL's charts: built with FELUCCA_FM4=1 only) */

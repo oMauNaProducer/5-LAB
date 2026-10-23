@@ -302,7 +302,7 @@ static void menu_put(uint32_t row, uint32_t v)
         ui_leds_inv = (uint8_t)(v < LEDS_COUNT ? 0u : v - (LEDS_COUNT - 1u));
         break;
     case MI_CLKOUT:                                    /* (1.6.2: seq.c clock_out_block reads its copy at once) */
-        ui_clkout = (uint8_t)(v ? 1u : 0u);
+        ui_clkout = (uint8_t)((ui_clkout & ~1u) | (v ? 1u : 0u));   /* (bits 1-2: CLK, ui_input.c) */
         clock_out_on = (uint8_t)(v ? 1u : 0u);
         ui.force = 1;                                  /* (not in draw_menu's signature: the row redraws) */
         break;
