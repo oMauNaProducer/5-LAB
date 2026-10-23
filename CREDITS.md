@@ -3,9 +3,13 @@
 Felucca is Leo Kuroshita's ([@kurogedelic](https://github.com/kurogedelic), [Hügelton Instruments](https://hugelton.com)). It uses and
 thanks the work below; each keeps its own licence (see [LICENSE](LICENSE), [LICENSING.md](LICENSING.md) and [LICENSES/](LICENSES/)).
 
+- **LAB-4T** (this fork of Felucca 1.6.1, [CHANGES.md](CHANGES.md)): MIDI clock out on USB (after the clock-out of [X0X](https://github.com/charlesvestal/fm1-x0x)
+  by [charlesvestal](https://github.com/charlesvestal), GPL-3.0); the steady BPM on an external clock (a small loop on the pulses' period) and CLK kept in the settings.
+  Developed with the assistance of an AI coding agent (Claude), the direction and every test on the device are the maintainer's.
 - **[Hügelton Instruments](https://hugelton.com)** (Leo Kuroshita, [@kurogedelic](https://github.com/kurogedelic)):
-  Felucca itself; the PHASE engine; the DRUM voices and kits; the Hügelton Sample
-  Pack (the drum samples, CC0 1.0); the [Fukiai](https://github.com/hugelton/Fukiai) icon
+  Felucca itself; the PHASE engine's waveforms (a C port of the oscillator of
+  [CrispyZebra](https://github.com/hugelton/CrispyZebra), GPL-3.0); the DRUM voices and kits; the Hügelton Sample
+  Pack (the drum samples, GPL-3.0-only, not CC0); the [Fukiai](https://github.com/hugelton/Fukiai) icon
   font ([MIT](LICENSES/MIT-Fukiai.txt)); the ANALOG, LOFI, TRIO, WHEEL and NOISE engines
   ([Felucca-Engines](https://github.com/hugelton/Felucca-Engines), [MIT](LICENSES/MIT-Felucca-Engines.txt))
 - Fonts: [Inter Tight](https://github.com/rsms/inter-tight) by The Inter Project Authors, [SIL OFL 1.1](LICENSES/OFL-InterTight.txt);

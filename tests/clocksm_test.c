@@ -134,8 +134,11 @@ int main(void)
           (double)midi_beat_samples > 44100.0 * 60.0 / 140.0 * 0.998 && (double)midi_beat_samples < 44100.0 * 60.0 / 140.0 * 1.002);
 
     follow(); feed(120.0, 24u * 8u, 0); c0 = bpm_changes;
-    feed(125.0, 24u * 2u, 0);
-    check("a jump of 5 BPM or more (120 -> 125) is taken within two beats", song.g[G_BPM] == 125);
+    feed(130.0, 24u * 2u, 0);
+    check("a jump of 5 BPM or more (120 -> 130) is a new tempo: taken within two beats", song.g[G_BPM] == 130);
+    follow(); feed(120.0, 24u * 8u, 0);
+    feed(125.0, 24u * 8u, 0);
+    check("... 120 -> 125 (under the 4 % that makes a new tempo at once: the loop follows it) is there within eight beats", song.g[G_BPM] == 125);
     follow(); feed(120.0, 24u * 8u, 0);
     feed(150.0, 24u * 2u, 0);
     check("... 120 -> 150 too", song.g[G_BPM] == 150);
@@ -155,6 +158,65 @@ int main(void)
     check("a Start and four beats at 100 and 90 BPM: first reads settle within 3 beats", song.g[G_BPM] >= 99 && song.g[G_BPM] <= 101);
     midi_clock_transport(0xFAu, (uint32_t)tnow); tnow += 0; feed(90.0, 24u * 3u, 0);
     check("a new Start forgets the old beats: 90 BPM within 3 beats", song.g[G_BPM] >= 89 && song.g[G_BPM] <= 91);
+    /* a DAW's start: the first pulses after the Start come early (a burst, 3 ms short per quarter for two quarters), then true.
+     * The BPM shown (120 before) must never read anything but 140 (+-1) once it moves: no jump to 143 and back */
+    follow(); song.g[G_BPM] = 120; bpm_last = 120;
+    {
+        double per = 60000.0 / 140.0 / 24.0; uint32_t i, lo = 999, hi = 0, st;
+        for (i = 0; i < 12u; i++) { tnow += per * (i < 6u ? 0.97 : i < 12u ? 0.98 : 1.0); midi_clock_pulse((uint32_t)(tnow + 0.5)); }
+        for (i = 0; i < 24u * 6u; i++) {
+            tnow += per; midi_clock_pulse((uint32_t)(tnow + 0.5) + (uint32_t)rnd(1));
+            st = (uint32_t)song.g[G_BPM];
+            if (st != 120u) { if (st < lo) lo = st; if (st > hi) hi = st; }
+        }
+        check("a DAW's start with a short first beat (143 on a 140): the BPM shown never leaves 139..141", hi >= 139u && lo >= 139u && hi <= 141u);
+        check("... and it settles on 140", song.g[G_BPM] == 140);
+    }
+    follow(); song.g[G_BPM] = 120; bpm_last = 120; feed(140.0, 30u, 0);
+    check("nothing is shown before the first reading (11 pulses ignored, then a beat): 120 stays through 30 pulses", song.g[G_BPM] == 120);
+    feed(140.0, 12u, 0);
+    check("... and 140 is shown from the 36th", song.g[G_BPM] == 140);
+
+    follow(); feed(137.3, 24u * 12u, 1);
+    check("a tempo that is not a whole BPM (137.3, jitter +-1 ms): shown as 137, and it stays", song.g[G_BPM] == 137);
+    c0 = bpm_changes; feed(137.3, 24u * 60u, 1);
+    check("... no flicker over a minute", bpm_changes == c0);
+    follow(); feed(140.5, 24u * 12u, 1); c0 = bpm_changes; feed(140.5, 24u * 60u, 1);
+    check("a tempo on the edge (140.5): one value, no flicker between 140 and 141", bpm_changes == c0);
+
+    follow(); feed(120.0, 24u * 8u, 2); feed(120.0, 24u * 40u, 2); c0 = bpm_changes; feed(120.0, 24u * 60u, 2);
+    check("a worse jitter (+-2 ms): 120 stays 120", song.g[G_BPM] == 120 && bpm_changes == c0);
+
+    follow(); feed(140.0, 24u * 8u, 1);
+    { uint32_t was = bpm_changes; feed(140.0, 6u, 1); midi_clock_pulse((uint32_t)(tnow + 350.0));   /* a pulse lost for 350 ms */
+      tnow += 350.0; feed(140.0, 24u * 4u, 1);
+      check("a gap of 350 ms (the DAW stopped its clock): the tempo is read again and is 140 again", song.g[G_BPM] == 140 && bpm_changes <= was + 1u); }
+
+    follow(); feed(120.0, 24u * 8u, 1);
+    { uint32_t bad_n = 0, i; double per = 60000.0 / 120.0 / 24;
+      for (i = 0; i < 24u * 4u; i++) {                  /* one pulse in ten lost (a USB hiccup): 2 periods in one go */
+          tnow += per; if (i % 10u == 9u) { tnow += per; i++; }
+          midi_clock_pulse((uint32_t)(tnow + 0.5) + (uint32_t)rnd(1));
+          bad_n += song.g[G_BPM] != 120;
+      }
+      check("a pulse lost now and then: the BPM shown stays 120", bad_n == 0u); }
+
+    {   /* many tempos and jitters: within a BPM of the master's; no change of the BPM shown after twenty beats (jitter up to +-2 ms) */
+        static const double TEMPO[] = {60.0, 79.9, 95.7, 110.2, 120.5, 133.0, 147.4, 160.9, 180.0, 200.0, 232.1};
+        uint32_t i, j, nbad = 0, nflick = 0, nbad3 = 0;
+        for (i = 0; i < sizeof TEMPO / sizeof TEMPO[0]; i++)
+            for (j = 0; j < 4u; j++) {
+                int32_t jit = (int32_t)(j % 3u) + 1;       /* +-1, +-2, +-3 ms */
+                double err;
+                follow(); lcg = 777u + 13u * i + j; feed(TEMPO[i], 24u * 20u, jit); c0 = bpm_changes;
+                feed(TEMPO[i], 24u * 40u, jit);
+                err = (double)song.g[G_BPM] - TEMPO[i]; err = err < 0 ? -err : err;
+                if (jit == 1 || (jit == 2 && TEMPO[i] <= 180.0)) { nbad += err > 1.0; nflick += bpm_changes != c0; }
+                else if (TEMPO[i] <= 180.0) nbad3 += err > 1.5;   /* (+-3 ms, or +-2 ms past 180 BPM: pulses of 12 ms or less: no flicker promised) */
+            }
+        check("11 tempos (60..232, with fractions) x jitter +-1..3 ms: the BPM shown within 1 of the master's (1.5 for +-3 ms)", nbad == 0u && nbad3 == 0u);
+        check("... jitter +-1 ms (to 232 BPM) or +-2 ms (to 180): none changes its BPM after twenty beats", nflick == 0u);
+    }
 
     printf(bad ? "clocksm: %d FAILED\n" : "clocksm: all passed\n", bad);
     return bad != 0;
