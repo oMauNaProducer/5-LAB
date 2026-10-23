@@ -12,7 +12,7 @@ t() {   # name [extra compiler flags]
     n=$1; shift
     if ! $CC "$@" -o "$O/$n" "tests/$n.c" -lm 2>"$O/$n.cc"; then echo "FAIL  $n (does not compile)"; head -3 "$O/$n.cc"; fail=1; return; fi
     if timeout 900 "$O/$n" >"$O/$n.out" 2>&1; then echo "ok    $n: $(tail -1 "$O/$n.out" | cut -c1-90)"
-    else echo "FAIL  $n"; grep FAIL "$O/$n.out" | head -3; fail=1; fi
+    else echo "FAIL  $n"; grep FAIL "$O/$n.out" | head -3; tail -n 12 "$O/$n.out" | cut -c1-200; fail=1; fi
 }
 for n in clockout_test clocksm_test click_test editor_test midi_control_test motion_test ratchet_test step15_test detail_test \
          seq155_test ui155_test v156_test v16_test swing_test project_test persistence_test settings_test backup_test \

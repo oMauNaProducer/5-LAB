@@ -158,6 +158,7 @@ static void basics(void)
 
     setup(30); clock_out_on = 1; transport_req = 1; go(44100u * 20u / CTL);
     pulse_stats(0, 30, &n, &worst, &drift);
+    printf("clockout:   (30 BPM: %u pulses, worst %.1f, drift %.1f samples, %u packets, %u blocks, CTL %d)\n", n, worst, drift, np, nb, (int)CTL);
     check("30 BPM, 20 s: 240 pulses, within a block of the time", n >= 240u && n <= 241u && worst < (double)CTL);
     setup(300); clock_out_on = 1; transport_req = 1; go(44100u * 10u / CTL);
     pulse_stats(0, 300, &n, &worst, &drift);
