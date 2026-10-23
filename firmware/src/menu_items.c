@@ -304,6 +304,7 @@ static void menu_put(uint32_t row, uint32_t v)
     case MI_CLKOUT:                                    /* (1.6.2: seq.c clock_out_block reads its copy at once) */
         ui_clkout = (uint8_t)(v ? 1u : 0u);
         clock_out_on = (uint8_t)(v ? 1u : 0u);
+        ui.force = 1;                                  /* (not in draw_menu's signature: the row redraws) */
         break;
     case MI_CLICK: case MI_CLKLVL: case MI_COUNTIN: rp_put(row - MI_CLICK, v); break;   /* (at once: click.c, seq.c) */
     case MI_TUNE: song.g[G_TUNE] = (int16_t)((int32_t)v + TUNE_MIN); break;
