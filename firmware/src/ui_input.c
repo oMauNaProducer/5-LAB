@@ -467,20 +467,22 @@ static void ui_leds(void)
 
 /* ---------------------------------------------------------- input --- */
 /* Predictable hardware response (#23): each decoded detent is one value step; a fast turn keeps its full signed
- * detent count. MENU > KNOB ACCEL ON (#52, OFF by default) multiplies a fast turn of a wide value (range > 32, not a
- * list of names; the FX and GLO layers' knobs too, #126) by 2..4, by up to 8 over a range above 64. The main loop
- * reads the knobs many times a frame (main.c), so a read holds one detent as a rule: the speed is the time per
- * detent, ACC_RATE / ms -> 25 ms x2, 16 ms x3, 12 ms x4, 10 ms x5 .. 6 ms or less x8 (a flick: 12 detents in 120 ms
- * move a -100..100 FX macro ~50). Only the longer of this read's and the previous read's time counts, and only while
- * the turn goes on (both under ACC_GAP ms) in one direction: a slow turn, the first two detents of a turn, a single
- * quick detent (a bounce) and a reversal are one step per detent, and the sign is always the detents'.
+ * detent count. MENU > KNOB ACCEL ON (#52) multiplies a fast turn of a wide value (range > 16, not a list of
+ * names; the FX and GLO layers' knobs too, #126): the faster the turn the wider the sweep, a slow turn is fine
+ * tuning, one value a detent. LAB-4T tuned it (after JIANT's, juanjiant-bit, GPL-3.0, which is a bit wider): the speed is
+ * the time per detent, ACC_RATE / ms -> 35 ms x2, 23 ms x3, 17 ms x4, 14 ms x5, 10 ms x7, 7 ms x10, capped by the range:
+ * x2 up to 32 values, x4 up to 64, x8 up to 100, x12 above (a flick across 0..127 in a dozen detents). The main loop
+ * reads the knobs many times a frame (main.c), so a read holds one detent as a rule. Only the longer of this read's and
+ * the previous read's time counts, and only while the turn goes on (both under ACC_GAP ms) in one direction: a slow
+ * turn, the first two detents of a turn, a single quick detent (a bounce) and a reversal are one step per detent, and
+ * the sign is always the detents'.
  * ui.enc_t[role]: bits 0..23 the ms of its last read, bit 24 its direction (+1), 25..31 its ms per detent (127 slow) */
-#define ACC_GAP 40u
-#define ACC_RATE 50u
+#define ACC_GAP 55u
+#define ACC_RATE 70u
 static int32_t accel(uint32_t role, int32_t s, int32_t range)
 {
     uint32_t now = fm1_ms & 0xFFFFFFu, st = ui.enc_t[role], up = s > 0, pi = st >> 25, a, i, m = 1;
-    if (!(ui_prefs & PREF_ACCEL) || range <= 32 || !s)
+    if (!(ui_prefs & PREF_ACCEL) || range <= 16 || !s)
         return s;
     a = (uint32_t)(s < 0 ? -s : s);
     i = ((now - st) & 0xFFFFFFu) / a;                   /* ms per detent of this read */
@@ -488,7 +490,7 @@ static int32_t accel(uint32_t role, int32_t s, int32_t range)
         i = 127u;                                       /* a new turn, or reversed */
     else if (pi < ACC_GAP) {
         m = ACC_RATE / (i > pi ? i : pi ? pi : 1u);
-        a = range > 64 ? 8u : 4u;                       /* (the cap) */
+        a = range > 100 ? 12u : range > 64 ? 8u : range > 32 ? 4u : 2u;   /* (the cap) */
         m = m < 1u ? 1u : m > a ? a : m;
     }
     ui.enc_t[role] = now | up << 24 | (i ? i : 1u) << 25;

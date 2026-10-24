@@ -19,6 +19,12 @@ Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything n
   unmuting it in GLO; held, the track stays muted). Once the track plays, the key mutes it only while it is held, as in Felucca. The map shows a GLO-muted
   track as GLO does (lit as muted), and redraws when the key releases it. (`perform.c` `perf_press`, `ui_layer.c`; `tests/perform_test.c`.)
 
+**KNOB ACCEL tuned (MENU > KNOB ACCEL ON)**
+- A calmer turn is helped sooner and a fast one goes further: 35 ms a detent x2, 23 ms x3, 17 ms x4, 14 ms x5, 10 ms x7, 7 ms x10; the cap
+  follows the range: x2 up to 32 values, x4 up to 64, x8 up to 100, x12 above (Felucca: 25 ms x2, x4 / x8 at most). It works on ranges above 16
+  (Felucca: above 32). A slow turn (55 ms a detent or more) is still one value a detent, and a reversal never jumps. A 12-detent flick on a
+  -100..100 value moves 63 (Felucca 47). The setting is still OFF until it is turned on once in the MENU. (`ui_input.c` `accel`.)
+
 **Taken from Felucca's main (after 1.6.1)**
 - `fx.c`: no divide by zero when the BPM reads 0 for a moment (#282); `tests/drumfuzz_test.c` includes `<stdint.h>` (#281).
 - Licence texts as Leo updated them: the Hügelton Sample Pack and `tools/gen_waves.py` are CC0 1.0 (`LICENSING.md`, `CREDITS.md`, the ABOUT credits, the installer footer).
