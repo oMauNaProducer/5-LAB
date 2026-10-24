@@ -995,8 +995,8 @@ static void layer_fx(void)
     for (e = 0; e < NTRK; e++) {                        /* the mutes of the black keys 1..4 */
         bnote(n, e);
         lcell(LC_X(e), LM_Y, LM_H, n, ICON_MUTE, trk_icon(e, 0), 0,
-              trk[e].p[P_MUTE] ? LS_DIM                      /* (LAB-4T: muted in GLO: dim, a press releases it) */
-                               : (held >> (PF_M1 + e)) & 1u ? LS_MUTE : LS_OFF, 0);
+              trk[e].p[P_MUTE] || (held >> (PF_M1 + e)) & 1u ? LS_MUTE : LS_OFF,   /* (LAB-4T: muted in GLO: as GLO shows it) */
+              0);
     }
 }
 static void layer_glo(void)
@@ -1238,7 +1238,8 @@ static void draw_layer(void)
     {
         uint32_t p;
         sig += (perf_kill ? 0u : perf_held | perf_latched) * 31u + perf_latch_on * 11u + perf_act * 131u + perf_avail() * 7u + (uint32_t)perf_harm_on() * 3u +
-               fx_key_held() * 4099u;
+               fx_key_held() * 4099u +
+               (uint32_t)(trk[0].p[P_MUTE] | trk[1].p[P_MUTE] << 1 | trk[2].p[P_MUTE] << 2 | trk[3].p[P_MUTE] << 3) * 137u;   /* (LAB-4T: a release redraws) */
         for (p = 0; p < PF_KEYS; p++)                   /* (the key map) */
             sig = sig * 33u + perf_map[p];
     }

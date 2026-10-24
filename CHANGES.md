@@ -17,7 +17,7 @@ Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything n
 **FX HOLD releases a track muted in GLO**
 - A track muted in GLO stays muted until it is released. In the FX layer, its black key releases it for good when it is let go (the same as
   unmuting it in GLO; held, the track stays muted). Once the track plays, the key mutes it only while it is held, as in Felucca. The map shows a GLO-muted
-  track dimmed. (`perform.c` `perf_press`, `ui_layer.c`; `tests/perform_test.c`.)
+  track as GLO does (lit as muted), and redraws when the key releases it. (`perform.c` `perf_press`, `ui_layer.c`; `tests/perform_test.c`.)
 
 **Taken from Felucca's main (after 1.6.1)**
 - `fx.c`: no divide by zero when the BPM reads 0 for a moment (#282); `tests/drumfuzz_test.c` includes `<stdint.h>` (#281).
