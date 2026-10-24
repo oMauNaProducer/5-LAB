@@ -1187,15 +1187,14 @@ static uint32_t graph_signature(void)
     const page_t *pg = cur_page();
     const track_t *t = TSEL;
     uint32_t h = 2166136261u, i;
-    if (ui.home)                                     /* scope: redraw every other frame; LAB-4T: not while a knob is being
-                                                      * turned (hot_t): the scope's redraw made the frame long, and the knobs
-                                                      * are read once a frame, so they answered late. It moves again when the
-                                                      * knob rests (~0.7 s) */
-        return h ^ (ui.hot_t ? 0u : ui.frame / 2u);
+    if (ui.home)                                     /* scope: redraw every other frame; LAB-4T: every fourth while a knob is being
+                                                      * turned (hot_t): the redraw makes the frame long, and the knobs are read
+                                                      * once a frame, so they answered late. Back to every other when it rests */
+        return h ^ (ui.hot_t ? ui.frame / 4u : ui.frame / 2u);
     h ^= (uint32_t)pg->graph * 131u + TSEL->eng_req + song.sel * 7777u + ui.page * 1291u;
     if (strip_kind() == SK_TITLE)                    /* MENU > LARGE: the page's title (its engine, its number) */
         return h ^ 0x5A17u;
-    if ((pg->graph == GR_NONE || pg->graph == GR_ARP) && !ui.hot_t) h ^= ui.frame / 2u;   /* (LAB-4T: as HOME's scope, held while a knob turns) */
+    if (pg->graph == GR_NONE || pg->graph == GR_ARP) h ^= ui.hot_t ? ui.frame / 4u : ui.frame / 2u;   /* (LAB-4T: as HOME's scope) */
     for (i = 0; i < P_COUNT; i++)
         h = (h ^ (uint32_t)t->p[i]) * 16777619u;
     h ^= (uint32_t)TSEL->preset * 7u + (uint32_t)song.g[G_SLOT] * 13u + TSEL->user * 257u + up_gen * 7919u + ui.uslot * 104729u +
