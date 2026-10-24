@@ -14,6 +14,11 @@ Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything n
 - Tried and left out: MIDI clock out on USB, and a smoother BPM estimate. On the FM-1 they did not hold up (the BPM still jumped when following a
   DAW, and a DAW following the FM-1 wandered between 139 and 141), so the clock follows Felucca 1.6.1's code as it was.
 
+**FX HOLD releases a track muted in GLO**
+- A track muted in GLO stays muted until it is released. In the FX layer, one press of its black key releases it for good (the same as
+  unmuting it in GLO). Pressed again, with the track playing, the key mutes it only while it is held, as in Felucca. The map shows a GLO-muted
+  track dimmed. (`perform.c` `perf_press`, `ui_layer.c`; `tests/perform_test.c`.)
+
 **Taken from Felucca's main (after 1.6.1)**
 - `fx.c`: no divide by zero when the BPM reads 0 for a moment (#282); `tests/drumfuzz_test.c` includes `<stdint.h>` (#281).
 - Licence texts as Leo updated them: the Hügelton Sample Pack and `tools/gen_waves.py` are CC0 1.0 (`LICENSING.md`, `CREDITS.md`, the ABOUT credits, the installer footer).

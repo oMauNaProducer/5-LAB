@@ -994,7 +994,9 @@ static void layer_fx(void)
     }
     for (e = 0; e < NTRK; e++) {                        /* the mutes of the black keys 1..4 */
         bnote(n, e);
-        lcell(LC_X(e), LM_Y, LM_H, n, ICON_MUTE, trk_icon(e, 0), 0, (held >> (PF_M1 + e)) & 1u ? LS_MUTE : LS_OFF, 0);
+        lcell(LC_X(e), LM_Y, LM_H, n, ICON_MUTE, trk_icon(e, 0), 0,
+              trk[e].p[P_MUTE] ? LS_DIM                      /* (LAB-4T: muted in GLO: dim, a press releases it) */
+                               : (held >> (PF_M1 + e)) & 1u ? LS_MUTE : LS_OFF, 0);
     }
 }
 static void layer_glo(void)

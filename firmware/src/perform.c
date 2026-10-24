@@ -8,6 +8,8 @@
  *   REPEAT 1/8 1/16 1/32, REVERSE, LPF | HPF, TAPE STOP, FREEZE, OCT UP, OCT DN, FLANGER, PHASER, REV THROW, ECHO
  *   THROW (1.5.1, D5 E5);  the other 2 white keys nothing; black keys 1..4 (F#3 G#3 A#3 C#4): tracks 1..4 muted while
  *   held (not P_MUTE, never saved).
+ * LAB-4T: a track that GLO has muted (P_MUTE) is released by one press of its black key (P_MUTE = 0, as in GLO, kept);
+ * the key does not also mute it for that press. A track that is not muted: the key mutes it while held, as before.
  * REV THROW / ECHO THROW (1.5.1): while held every track's reverb / delay send is full (as REV / DLY 127; perf_throw),
  * ECHO THROW also lifts the delay's feedback to 0.7 if it is lower (fx.c fx_buses); both glide in and out over 11.6 ms
  * (THR_SLOPE). Let go, the sends are the tracks' own again and what the buses hold rings out. The buses are the song's
@@ -188,6 +190,11 @@ static void perf_press(uint32_t e, int down)
 {
     if (e >= PF_N)
         return;
+    if (e >= PF_M1 && trk[e - PF_M1].p[P_MUTE]) {   /* LAB-4T: a GLO-muted track: one press releases it (as GLO's key does) */
+        if (down)
+            trk[e - PF_M1].p[P_MUTE] = 0;
+        return;                                     /* (no momentary mute for this press; the up does nothing) */
+    }
     if (perf_latch_on) {                  /* FX LATCH: a press turns it on or off, letting go does nothing */
         if (down) {
             perf_latched ^= PF_BIT(e);
