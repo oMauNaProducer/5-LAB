@@ -6,8 +6,10 @@
 synthesizer firmware for the M-VAVE FM-1. Lab = a place to try things out; 4T = the four audio tracks. It is GPL-3.0-only like Felucca, keeps its credits
 ([CREDITS.md](CREDITS.md)) and is **not** affiliated with or endorsed by Hügelton Instruments or M-VAVE.
 
-What is different from Felucca 1.6.1 is in [CHANGES.md](CHANGES.md): **MIDI clock out** on USB (MENU > SYSTEM > CLOCK OUT), **CLK kept** across
-power-offs and project loads, and a **steady BPM** when the FM-1 follows a DAW's clock. The sound is Felucca's, unchanged.
+What is different from Felucca 1.6.1 is in [CHANGES.md](CHANGES.md): **CLK kept** (INT / USB / TRS) across
+power-offs and project loads. The sound is Felucca's, unchanged.
+
+Felucca's author has stepped back from active development (see the [Maintenance Notice](https://github.com/hugelton/Felucca#maintenance-notice)); LAB-4T carries on from 1.6.1 with small, tested changes.
 
 Installing is at your own risk: the installer's **Return to official V15** or M-VAVE's updater takes you back.
 
