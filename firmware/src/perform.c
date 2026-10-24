@@ -8,8 +8,8 @@
  *   REPEAT 1/8 1/16 1/32, REVERSE, LPF | HPF, TAPE STOP, FREEZE, OCT UP, OCT DN, FLANGER, PHASER, REV THROW, ECHO
  *   THROW (1.5.1, D5 E5);  the other 2 white keys nothing; black keys 1..4 (F#3 G#3 A#3 C#4): tracks 1..4 muted while
  *   held (not P_MUTE, never saved).
- * LAB-4T: a track that GLO has muted (P_MUTE) is released by one press of its black key (P_MUTE = 0, as in GLO, kept);
- * the key does not also mute it for that press. A track that is not muted: the key mutes it while held, as before.
+ * LAB-4T: a track that GLO has muted (P_MUTE) is released when its black key is let go (P_MUTE = 0, as in GLO, kept);
+ * while the key is down the track stays muted. A track that is not muted: the key mutes it while held, as before.
  * REV THROW / ECHO THROW (1.5.1): while held every track's reverb / delay send is full (as REV / DLY 127; perf_throw),
  * ECHO THROW also lifts the delay's feedback to 0.7 if it is lower (fx.c fx_buses); both glide in and out over 11.6 ms
  * (THR_SLOPE). Let go, the sends are the tracks' own again and what the buses hold rings out. The buses are the song's
@@ -92,6 +92,7 @@ static volatile uint32_t perf_mask;   /* main: the FX button's bit while its lay
 static volatile uint32_t kb_mask;     /* main: the button bits whose hold makes keys a layer's (ui_layer.c), 0 = none */
 static volatile uint8_t kb_lock;      /* main: a layer locked open (#83, no button held): 1 keys are the layer's, 2 FX's */
 static volatile uint8_t perf_solo;    /* main: tracks soloed in the GLO layer (the others muted as by a black key) */
+static volatile uint8_t perf_rel;     /* LAB-4T: black keys pressed over a GLO-muted track, to release it when let go */
 static volatile uint8_t perf_kill;    /* main: every effect off (the menu, a dialog, UBOOT) */
 static volatile int8_t perf_k[4];     /* main: the knob macros, 0 = untouched: FILTER -100..100 (- LPF, + HPF),
                                        * CRUSH 0..100, THROW 0..100, DEPTH cut 0..100 (the buffer effects' level) */
@@ -190,10 +191,19 @@ static void perf_press(uint32_t e, int down)
 {
     if (e >= PF_N)
         return;
-    if (e >= PF_M1 && trk[e - PF_M1].p[P_MUTE]) {   /* LAB-4T: a GLO-muted track: one press releases it (as GLO's key does) */
-        if (down)
-            trk[e - PF_M1].p[P_MUTE] = 0;
-        return;                                     /* (no momentary mute for this press; the up does nothing) */
+    if (e >= PF_M1) {                               /* LAB-4T: a GLO-muted track: it is released when its key is LET GO */
+        uint32_t k = e - PF_M1, bit = 1u << k;
+        if (down) {
+            if (trk[k].p[P_MUTE]) {
+                perf_rel |= (uint8_t)bit;           /* (pressed over a muted track: nothing yet, the track stays muted) */
+                return;
+            }
+            perf_rel &= (uint8_t)~bit;
+        } else if (perf_rel & bit) {
+            perf_rel &= (uint8_t)~bit;
+            trk[k].p[P_MUTE] = 0;                   /* (released: as GLO's key unmutes it, and kept) */
+            return;
+        }
     }
     if (perf_latch_on) {                  /* FX LATCH: a press turns it on or off, letting go does nothing */
         if (down) {

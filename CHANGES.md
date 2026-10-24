@@ -15,8 +15,8 @@ Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything n
   DAW, and a DAW following the FM-1 wandered between 139 and 141), so the clock follows Felucca 1.6.1's code as it was.
 
 **FX HOLD releases a track muted in GLO**
-- A track muted in GLO stays muted until it is released. In the FX layer, one press of its black key releases it for good (the same as
-  unmuting it in GLO). Pressed again, with the track playing, the key mutes it only while it is held, as in Felucca. The map shows a GLO-muted
+- A track muted in GLO stays muted until it is released. In the FX layer, its black key releases it for good when it is let go (the same as
+  unmuting it in GLO; held, the track stays muted). Once the track plays, the key mutes it only while it is held, as in Felucca. The map shows a GLO-muted
   track dimmed. (`perform.c` `perf_press`, `ui_layer.c`; `tests/perform_test.c`.)
 
 **Taken from Felucca's main (after 1.6.1)**

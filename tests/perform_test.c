@@ -588,10 +588,10 @@ static int test_misc(void)
         snprintf(what, sizeof what, "black key 1: track 1 muted while held (peak %d -> %d), P_MUTE untouched", before, during);
         bad += check(what, before > 1000 && during < 200 && !trk[0].p[P_MUTE]);
     }
-    {   /* LAB-4T: a track muted in GLO (P_MUTE): one press of its black key releases it for good; pressed again, the key mutes it while held */
+    {   /* LAB-4T: a track muted in GLO (P_MUTE): its black key releases it when LET GO (held, it stays muted); the next hold mutes it while held */
         int32_t o[2 * CTL];
         uint32_t f;
-        int32_t before = 0, freed = 0, held = 0, after = 0;
+        int32_t before = 0, down = 0, freed = 0, held = 0, after = 0;
         song_setup();
         trk[1].p[P_SLEN] = 1; trk[3].p[P_SLEN] = 1;
         trk[1].step[0].n = 0; trk[3].step[0].n = 0;          /* only track 1 plays, dry */
@@ -600,23 +600,25 @@ static int test_misc(void)
         transport_req = 1;
         for (f = 0; f < 4u * FS; f += CTL) {
             uint32_t i;
-            if (f == 44096u) { perf_press(PF_M1, 1); perf_press(PF_M1, 0); }   /* a tap: released */
-            if (f == 132288u / 2u + 32u) perf_press(PF_M1, 1);                /* held again: muted meanwhile */
-            if (f == 132288u / 2u + 32u + 44064u) perf_press(PF_M1, 0);
+            if (f == 44096u) perf_press(PF_M1, 1);                  /* down: still muted */
+            if (f == 66144u) perf_press(PF_M1, 0);                  /* up: released */
+            if (f == 88192u) perf_press(PF_M1, 1);                  /* down again: muted while held */
+            if (f == 110240u) perf_press(PF_M1, 0);                 /* up: plays */
             mix_block(o, CTL);
             for (i = 0; i < CTL; i++) {
                 int32_t a = abs(o[2 * i]);
                 if (f > FS / 2u && f < 44096u) before = a > before ? a : before;
-                else if (f > 44096u + 8192u && f < 66144u) freed = a > freed ? a : freed;
-                else if (f > 66144u + 8192u && f < 66144u + 32u + 44064u) held = a > held ? a : held;
-                else if (f > 66144u + 32u + 44064u + 8192u) after = a > after ? a : after;
+                else if (f > 44096u + 2048u && f < 66144u) down = a > down ? a : down;
+                else if (f > 66144u + 8192u && f < 88192u) freed = a > freed ? a : freed;
+                else if (f > 88192u + 2048u && f < 110240u) held = a > held ? a : held;
+                else if (f > 110240u + 8192u) after = a > after ? a : after;
             }
         }
         transport_req = 2;
         mix_block(o, CTL);
-        snprintf(what, sizeof what, "GLO-muted track 1: silent (%d), one tap of its black key frees it (%d, P_MUTE %d), held again it mutes (%d), let go it plays (%d)",
-                 before, freed, trk[0].p[P_MUTE], held, after);
-        bad += check(what, before < 200 && freed > 1000 && held < 200 && after > 1000 && trk[0].p[P_MUTE] == 0);
+        snprintf(what, sizeof what, "GLO-muted track 1: silent (%d), key held still silent (%d), let go it plays (%d, P_MUTE %d), held again it mutes (%d), let go it plays (%d)",
+                 before, down, freed, trk[0].p[P_MUTE], held, after);
+        bad += check(what, before < 200 && down < 200 && freed > 1000 && held < 200 && after > 1000 && trk[0].p[P_MUTE] == 0);
         trk[0].p[P_MUTE] = 0;
     }
     return bad;
