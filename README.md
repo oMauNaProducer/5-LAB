@@ -2,7 +2,7 @@
 
 [![License: GPL-3.0-only](https://img.shields.io/badge/license-GPL--3.0--only-blue.svg)](LICENSE)
 
-**LAB-4T v0.9.7** is a fork of [Felucca](https://github.com/hugelton/Felucca) 1.6.1 (Leo Kuroshita, Hügelton Instruments), a multi-engine
+**LAB-4T v0.9.8** is a fork of [Felucca](https://github.com/hugelton/Felucca) 1.6.1 (Leo Kuroshita, Hügelton Instruments), a multi-engine
 synthesizer firmware for the M-VAVE FM-1. Lab = a place to try things out; 4T = the four audio tracks. It is GPL-3.0-only like Felucca, keeps its credits
 ([CREDITS.md](CREDITS.md)) and is **not** affiliated with or endorsed by Hügelton Instruments or M-VAVE.
 

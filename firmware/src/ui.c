@@ -814,8 +814,9 @@ static void home_tap(void)
 }
 
 /* MENU > CONTROL > SELECT PAGE (1.5.5, Discussion #188): the SELECT knob steps the pages of the family shown, a detent
- * each: right as a tap of the family's button does, left back, round (the pages that show for the track's engine);
- * HOME, MIXER and CLOCK are one round, as HOME's taps go. A family of one page (GLO's SONG) stays */
+ * each: right as a tap of the family's button does, left back (the pages that show for the track's engine);
+ * LAB-4T: it stops at the family's first and last page (the family's button and HOME's taps still go round);
+ * HOME, MIXER and CLOCK are one run, in that order. A family of one page (GLO's SONG) stays */
 static void page_turn(int32_t dir)
 {
     uint32_t fam = ui.home ? (uint32_t)FAM_TRK : cur_page()->fam, i, m = 0, at = 0;
@@ -830,7 +831,10 @@ static void page_turn(int32_t dir)
         }
     if (m < 2u)
         return;
-    i = ring[(at + (dir > 0 ? 1u : m - 1u)) % m];
+    if (dir > 0 ? at + 1u >= m : !at)                   /* LAB-4T: no round: the first page of the family stops a turn back, the last one
+                                                         * a turn forward */
+        return;
+    i = ring[dir > 0 ? at + 1u : at - 1u];
     if (i == 0xFFu) {
         go_home();
         return;

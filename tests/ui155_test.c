@@ -158,16 +158,20 @@ static int select_page(void)
     turn(EN_SELECT, 1);
     ok = title_is("ENV DEST");
     turn(EN_SELECT, 1);
-    ok &= title_is("ENV");                              /* (round) */
+    ok &= title_is("ENV DEST");                         /* (LAB-4T: the last page of the family: it stays, no round) */
     turn(EN_SELECT, -1);
-    ok &= title_is("ENV DEST");
+    ok &= title_is("ENV");
+    turn(EN_SELECT, -1);
+    ok &= title_is("ENV");                              /* (the first: it stays) */
     go_title("LFO"); frame();
     turn(EN_SELECT, 2);
     ok &= title_is("LFO DEST");
-    turn(EN_SELECT, -3);
-    ok &= title_is("MOD");                              /* (LFO LFO 2 LFO DEST MOD, round) */
+    turn(EN_SELECT, -5);
+    ok &= title_is("LFO");                              /* (LFO LFO 2 LFO DEST MOD: it stops at the first) */
+    turn(EN_SELECT, 9);
+    ok &= title_is("MOD");                              /* (and at the last) */
     ok &= song.g[G_BPM] == b0;
-    bad += check("  PAGE: SELECT steps the family's pages, a detent each, round both ways; the tempo stays", ok);
+    bad += check("  PAGE: SELECT steps the family's pages, a detent each, stopping at the family's first and last page; the tempo stays", ok);
 
     go_home(); frame();
     turn(EN_SELECT, 1);
@@ -175,13 +179,17 @@ static int select_page(void)
     turn(EN_SELECT, 1);
     ok &= title_is("CLOCK");
     turn(EN_SELECT, 1);
-    ok &= ui.home;
+    ok &= title_is("CLOCK");                            /* (the last: it stays, no round to HOME) */
+    turn(EN_SELECT, -2);
+    ok &= title_is("HOME") || ui.home;
     turn(EN_SELECT, -1);
+    ok &= ui.home;                                      /* (the first: it stays) */
+    turn(EN_SELECT, 2);
     ok &= title_is("CLOCK");
     b0 = song.g[G_BPM];
     turn(EN_K1, 1);
     ok &= song.g[G_BPM] == b0 + 1;                      /* CLOCK's KNOB 1: the tempo */
-    bad += check("  PAGE: HOME -> MIXER -> CLOCK -> HOME (as HOME's taps), back too; CLOCK's KNOB 1 still the tempo", ok);
+    bad += check("  PAGE: HOME -> MIXER -> CLOCK, back too, stopping at both ends; CLOCK's KNOB 1 still the tempo", ok);
 
     go_title("EDIT 1"); frame();
     for (i = 0; i < 12u && ok; i++) {                   /* EDIT's pages: only the ones the engine shows */
@@ -191,7 +199,7 @@ static int select_page(void)
     go_title("SONG"); frame();
     turn(EN_SELECT, 1);
     ok &= title_is("SONG");                             /* (GLO: one page) */
-    bad += check("  PAGE: EDIT's round is the engine's pages; a family of one page stays", ok);
+    bad += check("  PAGE: EDIT's run is the engine's pages; a family of one page stays", ok);
 
     go_title("ENV"); frame();
     b0 = song.g[G_BPM];

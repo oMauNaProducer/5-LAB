@@ -1,13 +1,13 @@
 # LAB-4T: changes from Felucca 1.6.1
 
 LAB-4T is a fork of [Felucca](https://github.com/hugelton/Felucca) 1.6.1 by Leo Kuroshita (Hügelton Instruments), GPL-3.0-only like the
-original. **Version 0.9.7** (the first LAB-4T was 0.6) is the fork's own numbering: it starts again from 0.x so it is never mistaken for an official Felucca release.
+original. **Version 0.9.8** (the first LAB-4T was 0.6) is the fork's own numbering: it starts again from 0.x so it is never mistaken for an official Felucca release.
 Four audio tracks (the "4T"), as in Felucca; the lab is for trying things out.
 
 Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything not listed here is Felucca 1.6.1 as it was
 (the sound is the same: the 98 golden renders of `tests/golden.txt` are unchanged).
 
-## 0.9.7 (and the 0.6 before it)
+## 0.9.8 (and the 0.6 before it)
 
 **External clock (CLK USB / TRS)**
 - **CLK is kept** in the settings (it came back to INT at every power-on): a project load leaves it.
@@ -30,12 +30,16 @@ Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything n
   which made the frame long, and the knobs are read once a frame. While a knob is turned (and for about half a second after) the scope is redrawn every
   fourth frame instead, then every other frame again. (`ui_graph.c` `graph_signature`.)
 
+**SELECT in PAGE mode stops at the ends**
+- MENU > CONTROL > SELECT PAGE no longer goes round: turned back it stops at the first page of the family, turned forward at the last one
+  (HOME is MIXER, CLOCK after it). The family's button and HOME's taps still go round. (`ui.c` `page_turn`; `tests/ui155_test.c`.)
+
 **Taken from Felucca's main (after 1.6.1)**
 - `fx.c`: no divide by zero when the BPM reads 0 for a moment (#282); `tests/drumfuzz_test.c` includes `<stdint.h>` (#281).
 - Licence texts as Leo updated them: the Hügelton Sample Pack and `tools/gen_waves.py` are CC0 1.0 (`LICENSING.md`, `CREDITS.md`, the ABOUT credits, the installer footer).
 
 **Fork**
-- Version `v0.9.7` (the editor reports `FELUCCA v0.9.7 LAB-4T`; the "FELUCCA " prefix is what the web editor and installer look for), splash and ABOUT say LAB-4T and credit Hügelton Instruments.
+- Version `v0.9.8` (the editor reports `FELUCCA v0.9.8 LAB-4T`; the "FELUCCA " prefix is what the web editor and installer look for), splash and ABOUT say LAB-4T and credit Hügelton Instruments.
 - `.github/workflows/build.yml`: builds the package, the browser emulator ("Try"), the web editor and installer, runs `tests/ci_quick.sh`, and
   publishes to GitHub Pages (a public repository).
 - New tests: the CLK checks in `tests/ui_test.c`; `tests/ci_quick.sh`.
