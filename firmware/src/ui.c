@@ -102,9 +102,8 @@ static uint32_t sel_mode(void) { return ((ui_prefs2 >> 4) & 1u) | ((ui_prefs2 >>
  * this byte no engine uses holds the level: 1 LO, 2 HI; 0 (every older setting) or another value = INV as before.
  * Saved with the settings; read only while LEDS is INV (menu_items.c leds_row) */
 #define ui_leds_inv (favorites.factory[15][25])
-/* 1.6.2: MENU > SYSTEM > CLOCK OUT (seq.c clock_out_block): 1 ON, the FM-1 sends MIDI clock and Start / Stop on USB MIDI
- * while the song plays on the internal clock; 0 OFF, as every older setting. A byte of its own that no engine uses,
- * saved with the settings (settings_persist.c: another value reads as 0). Off at power-on until it is set once */
+/* LAB-4T v0.6: the CLK the FM-1 follows (bits 1-2: 0 INT, 1 USB, 2 TRS), kept past a power-off (ui_input.c). A byte of its
+ * own that no engine uses, saved with the settings (settings_persist.c: another value reads as INT). Bit 0 is not used */
 #define ui_clkout (favorites.factory[15][13])
 static uint32_t leds_inv(void) { return settings_leds == LEDS_INV && ui_leds_inv - 1u < 2u ? ui_leds_inv : 0u; }
 enum { HV_SCOPE, HV_TRACKS, HV_LEVELS, HV_COUNT };

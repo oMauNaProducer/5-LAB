@@ -1652,11 +1652,11 @@ static int test_menu_tabs(void)
             }
     }
     ui_prefs = 0;
-    bad += check("MENU tabs: DISPLAY CONTROL AUDIO MIDI SYSTEM (8 8 6 8 8 rows: 1.6.1 2ND CORE, 1.6.2 CLOCK OUT, a FELUCCA_CPU2=0 build SYSTEM 7; 1.5.5: SELECT, T1..T4 CHANNEL, AUTO SELECT, SCREEN WAKE), 1..8 each in a run, fit the page; tab gaps "
+    bad += check("MENU tabs: DISPLAY CONTROL AUDIO MIDI SYSTEM (8 8 6 8 7 rows: 1.6.1 2ND CORE, a FELUCCA_CPU2=0 build SYSTEM 6; 1.5.5: SELECT, T1..T4 CHANNEL, AUTO SELECT, SCREEN WAKE), 1..8 each in a run, fit the page; tab gaps "
                  "constant (S, LARGE)",
                  ok && MTAB_COUNT == 5u && str_eq(MTAB_NAME[0], "DISPLAY") && str_eq(MTAB_NAME[MTAB_MIDI], "MIDI") &&
                  mtab_rows(MTAB_DISPLAY) == 8u && MI_TAB[MI_HOME] == MTAB_DISPLAY && mtab_rows(MTAB_CONTROL) == 8u && MI_TAB[MI_SELECT] == MTAB_CONTROL && mtab_rows(MTAB_AUDIO) == 6u &&
-                 mtab_rows(MTAB_MIDI) == 8u && MI_TAB[MI_MFOLLOW] == MTAB_MIDI && MI_TAB[MI_SCRWAKE] == MTAB_MIDI && MI_SCRWAKE + 1u == MI_LCLEAR && MI_TAB[MI_LCLEAR] == MTAB_MIDI && MI_TAB[MI_TCH4] == MTAB_MIDI && mtab_rows(MTAB_SYSTEM) == 7u + FELUCCA_CPU2 && MI_TAB[MI_CLKOUT] == MTAB_SYSTEM &&
+                 mtab_rows(MTAB_MIDI) == 8u && MI_TAB[MI_MFOLLOW] == MTAB_MIDI && MI_TAB[MI_SCRWAKE] == MTAB_MIDI && MI_SCRWAKE + 1u == MI_LCLEAR && MI_TAB[MI_LCLEAR] == MTAB_MIDI && MI_TAB[MI_TCH4] == MTAB_MIDI && mtab_rows(MTAB_SYSTEM) == 6u + FELUCCA_CPU2 &&
 #if FELUCCA_CPU2
                  MI_TAB[MI_CPU2] == MTAB_SYSTEM &&
 #endif
@@ -9271,8 +9271,8 @@ static int test_fx_map_columns(void)
     return bad;
 }
 
-/* 1.6.2: CLK (GLO > SYSTEM, INT USB TRS) is a setting of the FM-1 (ui.c ui_clkout bits 1-2, settings byte [15][13]): a change
- * is kept in the settings record, a settings load puts it back, a project load leaves it, CLOCK OUT's switch leaves it */
+/* LAB-4T v0.6: CLK (GLO > SYSTEM, INT USB TRS) is a setting of the FM-1 (ui.c ui_clkout bits 1-2, settings byte [15][13]): a change
+ * is kept in the settings record, a settings load puts it back, a project load leaves it */
 static int test_clk_persist(void)
 {
     int bad = 0, ok;
@@ -9289,7 +9289,7 @@ static int test_clk_persist(void)
     ui_power_on(); frame();
     p.favorites.factory[15][13] = 2u << 1;
     ok = settings_import(&p, sizeof p) == 1; frame();
-    ok &= song.g[G_CLOCK] == 2 && (ui_clkout >> 1 & 3u) == 2u && !clock_out_on;
+    ok &= song.g[G_CLOCK] == 2 && (ui_clkout >> 1 & 3u) == 2u ;
     bad += check("... a settings load (power-on) sets CLK again: TRS", ok);
 
     p.favorites.factory[15][13] = 7u;
@@ -9307,11 +9307,6 @@ static int test_clk_persist(void)
     ok &= song.g[G_CLOCK] == 1 && (ui_clkout >> 1 & 3u) == 1u;
     bad += check("... a project load (stored with CLK INT) leaves CLK alone: USB stays", ok);
 
-    menu_put(MI_CLKOUT, 1); frame();
-    ok = song.g[G_CLOCK] == 1 && (ui_clkout & 7u) == 3u && clock_out_on;
-    menu_put(MI_CLKOUT, 0); frame();
-    ok &= song.g[G_CLOCK] == 1 && (ui_clkout & 7u) == 2u && !clock_out_on;
-    bad += check("... CLOCK OUT's switch (ON, OFF) leaves CLK alone", ok);
     return bad;
 }
 

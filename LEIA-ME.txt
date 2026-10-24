@@ -1,1 +1,5 @@
-LAB-4T v0.6. Extraia este zip POR CIMA da pasta do clone (aceite substituir). Nao mexa em firmware/engines.
+LAB-4T v0.6 (sem CLOCK OUT) + correcoes do main do Felucca: TUDO EM UM ZIP.
+1. Extraia por cima da pasta do clone (a que tem a pasta firmware, tests, web), aceitando substituir.
+2. APAGUE da pasta do clone: tests/clockout_test.c e tests/clocksm_test.c
+3. Commit e Push.
+(felucca.c nao muda: a versao continua v0.6, linha 43. Mude la quando quiser outra.)
