@@ -1,11 +1,23 @@
 # 5-LAB: changes from Felucca 1.6.1
 
 5-LAB is a fork of [Felucca](https://github.com/hugelton/Felucca) 1.6.1 by Leo Kuroshita (Hügelton Instruments), GPL-3.0-only like the
-original. **Version 1.0.4** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
+original. **Version 1.0.5** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
 Five audio tracks, every engine on all five; the lab is for trying things out.
 
 Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything not listed here is Felucca 1.6.1 as it was
 (the sound is the same: the 98 golden renders of `tests/golden.txt` are unchanged).
+
+## 1.0.5: three fixes in SEQ > AUTOMATION
+
+- **Track 5's automation landed on track 1.** A record's address (track * 64 + step, up to 319 with five tracks) was stored in a byte in three places
+  (adding a record, a value edit, and the SEQ tools that shift or move steps), so every record of track 5 became a record of track 1 at the same step. Fixed:
+  the address is kept whole. **Records of track 5 made before this version are on track 1** (and in the saved projects as such): clear them
+  (AUTOMATION > PLAY > OCT+ CLEAR on track 1) and record again.
+- **REC (the automation arm) is a track's own.** Turning it on for one track no longer turns it on for all of them: each track has its REC
+  (off at power-on and at every project load).
+- **REC and RAMP show their new value at once.** The page did not redraw when they changed (only after moving to another row or page): the page's
+  signature now includes them.
+- Tests: `tests/ramp_test.c` (track 5's records and a recorded turn on it, REC of track 1 / 2 / 5, the page signature on REC and RAMP).
 
 ## 1.0.4: RAMP records the corners of a knob turn, not every step
 

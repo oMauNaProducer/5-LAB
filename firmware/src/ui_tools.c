@@ -81,7 +81,7 @@ static void tl_order(track_t *t, uint32_t len, const uint8_t *src)
     for (j = 0; j < motion.count; j++) {
         motion_event_t *e = &motion.event[j];
         if ((e->place >> 6) == k && (e->place & 63u) < len)
-            e->place = (uint8_t)(k << 6 | to[e->place & 63u]);
+            e->place = (uint16_t)(k << 6 | to[e->place & 63u]);
     }
     motion_unguard(f);
 }
@@ -495,7 +495,7 @@ static int tl_motion_plan(track_t *t, uint32_t lo, uint32_t hi, uint32_t cn, uin
         if (s < cn) {
             if (n < MOTION_MAX) {
                 tl_mo.event[n] = *e;
-                tl_mo.event[n].place = (uint8_t)(k << 6 | (s + by));
+                tl_mo.event[n].place = (uint16_t)(k << 6 | (s + by));
             }
             n++;
         }

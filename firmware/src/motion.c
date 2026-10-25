@@ -13,10 +13,11 @@ static int16_t motion_base[NTRK][P_COUNT];
 static uint32_t motion_active[NTRK][(P_COUNT + 31u) / 32u];
 static uint32_t motion_locked[NTRK][(P_COUNT + 31u) / 32u];   /* the ids a lock holds now (put back at the next step) */
 static uint8_t motion_base_valid, motion_full;
-/* 5-LAB 1.0.2: the automation recording is armed (SEQ > AUTOMATION, the REC row; ui_events.c). A knob turned, a MIDI CC or an
- * editor edit becomes automation only while it is on (and REC is on, PLAY runs, the track is the selected one). Off at
- * power-on and at every project load: never saved */
-static volatile uint8_t motion_arm;
+/* 5-LAB 1.0.2: the automation recording is armed (SEQ > AUTOMATION, the REC row; ui_events.c), per track since 1.0.5. A knob
+ * turned, a MIDI CC or an editor edit becomes automation only while its track is armed (and REC is on, PLAY runs, the track is
+ * the selected one). Off at power-on and at every project load: never saved */
+static volatile uint8_t motion_arm;               /* a bit a track (bit k: track k+1) */
+static int motion_armed(const track_t *t) { return (motion_arm >> trk_index(t)) & 1u; }
 static uint32_t motion_guard(void)
 {
 #if defined(FM1_IRQ_TARGET)
@@ -197,7 +198,7 @@ static int motion_put(track_t *t, uint32_t step, uint32_t id, int16_t value, uin
     for (i = 0; i < motion.count; i++)
         if (motion.event[i].place == (k << 6 | step) && MOTION_ID(&motion.event[i]) == id) break;
     if (i == MOTION_MAX) { motion_full = 1; motion_unguard(f); return 2; }
-    motion.event[i].place = (uint8_t)(k << 6 | step);
+    motion.event[i].place = (uint16_t)(k << 6 | step);
     motion.event[i].param = (uint8_t)(id | kind);
     motion.event[i].value = (int8_t)value;
     RING_PUBLISH();
@@ -340,7 +341,7 @@ static int motion_capture(track_t *t, uint32_t id, int16_t value)
 {
     uint32_t k = trk_index(t), idx, len, period, f;
     if (!motion_param(id)) return 0;
-    if (!motion_arm || !rec_on(t) || t != TSEL) {
+    if (!motion_armed(t) || !rec_on(t) || t != TSEL) {
         /* A live edit becomes a new base, even when an earlier motion value is
          * currently sounding. Subsequent recorded events can still override it. */
         f = motion_guard();
@@ -521,7 +522,7 @@ static int motion_move(track_t *t, uint32_t i, uint32_t step, uint32_t id, int16
     f = motion_guard();
     if (motion.event[i].place != (trk_index(t) << 6 | step) || MOTION_ID(&motion.event[i]) != id)
         motion_restore(t);                              /* (a value alone: what sounds stays) */
-    motion.event[i].place = (uint8_t)(trk_index(t) << 6 | step);
+    motion.event[i].place = (uint16_t)(trk_index(t) << 6 | step);
     motion.event[i].param = (uint8_t)((motion.event[i].param & MOTION_LOCK) | id);
     motion.event[i].value = (int8_t)param_fit(d, v);
     motion_unguard(f);

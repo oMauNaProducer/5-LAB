@@ -257,7 +257,8 @@ static void ev_follow(uint32_t c)
         ui.ev_row = (uint16_t)r;
 }
 
-/* what the list shows (graph_signature): the rows, their values, the one selected, PLAY, QUANTIZE, + ADD's place */
+/* what the list shows (graph_signature): the rows, their values, the one selected, PLAY, REC, QUANTIZE, RAMP, + ADD's place (a
+ * setting not in it is drawn only at the next redraw: 1.0.5, REC and RAMP changed on the spot) */
 static uint32_t ev_sig(void)
 {
     const track_t *t = TSEL;
@@ -273,7 +274,8 @@ static uint32_t ev_sig(void)
         h = (h ^ c) * 16777619u;
     }
     return (h ^ ev_row(n) * 2654435761u ^ ((uint32_t)ui.ev_step << 8 | ui.ev_id) * 104729u ^
-            (uint32_t)motion_enabled(t) * 7919u ^ (uint32_t)t->p[P_SQNT] * 1299709u ^ ui.ev_vel * 15485863u) *
+            (uint32_t)motion_enabled(t) * 7919u ^ (uint32_t)t->p[P_SQNT] * 1299709u ^ ui.ev_vel * 15485863u ^
+            (uint32_t)motion_armed(t) * 32452843u ^ (uint32_t)motion_ramping(t) * 49979687u) *
            16777619u;
 }
 
@@ -382,7 +384,7 @@ static void ev_knob(uint32_t slot, int32_t s)
     }
     if (k == EVK_ARM) {                                 /* REC (1.0.2): KNOB 4 right ON, left OFF */
         if (slot == 3u)
-            motion_arm = s > 0;
+            motion_arm = (uint8_t)(s > 0 ? motion_arm | (1u << trk_index(t)) : motion_arm & ~(1u << trk_index(t)));
         return;
     }
     if (k == EVK_QNT) {                                 /* QUANTIZE: KNOB 4 right ON, left OFF */

@@ -1008,7 +1008,7 @@ static void draw_columns(void)
             draw_column(0, "ROW", "ALL", "", VAL(0u), -1, ICON_AUTO);
             draw_column(1, "", "", "", T_THEME, -1, ICON_NONE);
             draw_column(2, "", "", "", T_THEME, -1, ICON_NONE);
-            draw_column(3, "REC", motion_arm ? "ON" : "OFF", "", VAL(3u), -1, motion_icon());
+            draw_column(3, "REC", motion_armed(t) ? "ON" : "OFF", "", VAL(3u), -1, motion_icon());
             return;
         }
         if (k == EVK_RMP) {                            /* RAMP (1.0.3): the events HOLD their value or RAMP to the next */

@@ -201,6 +201,76 @@ static int ramp_record(void)
     motion_set_ramp(t, 0); motion_clear(t); song.rec = 0; motion_arm = 0;
     return bad;
 }
+/* 5-LAB 1.0.5: the fifth track's automation (a record's place is 16 bits: track * 64 + step reaches 319), REC a track's own, the list
+ * redrawn when REC or RAMP change */
+static int track5_and_arm(void)
+{
+    int bad = 0;
+    uint32_t s[16], n, i, ok, sig;
+    int16_t v[16];
+    track_t *t = ramp_track(4);
+    song.sel = 4; song.rec = 1u << 4;
+    motion_set_ramp(t, 1);
+    motion_arm = (uint8_t)(1u << 4);
+    for (i = 0, ok = 1; i < 12; i++)
+        ok &= !motion_set_event(t, i, P_REV, (int16_t)(10 + 5 * i)) && motion.event[i].place == (uint16_t)(4u << 6 | i);
+    bad += check("track 5's records keep their track (place 256 + step), none lands on track 1", ok && motion_count(t) == 12u && motion_count(&trk[0]) == 0u);
+    motion_delete_event(t, 3, P_REV);
+    bad += check("  and a delete finds them again", motion_count(t) == 11u && motion_find_ev(4, 3, P_REV) < 0 && motion_find_ev(4, 4, P_REV) >= 0);
+    motion_clear(t); motion_set_ramp(t, 1); motion_arm = (uint8_t)(1u << 4);
+    {   track_t *u = &trk[4];
+        uint32_t blocks = 0, last = 0xFFFFu;
+        seq_start();
+        while (blocks++ < 400000u) {
+            int32_t pos;
+            seq_tick(u, CTL);
+            if (u->seq_idx >= 12u) break;
+            pos = (int32_t)u->seq_idx * 256 + (int32_t)((uint64_t)u->seq_pos * 256u / step_samples(u, div_samples((uint32_t)u->p[P_SDIV]), u->seq_idx));
+            u->p[P_REV] = (int16_t)(20 + 50 * pos / (11 * 256));
+            motion_capture(u, P_REV, u->p[P_REV]);
+            last = u->seq_idx;
+        }
+        seq_stop();
+        (void)last;
+    }
+    for (i = 0, n = 0; i < motion.count; i++) {
+        ok = motion.event[i].place >> 6;
+        if (ok == 4u && MOTION_ID(&motion.event[i]) == P_REV) { s[n] = motion.event[i].place & 63u; v[n++] = motion.event[i].value; }
+        else if (ok == 0u && MOTION_ID(&motion.event[i]) == P_REV) n += 100;
+    }
+    bad += check("track 5 with RAMP: a knob turned over 12 steps leaves its two corner records on track 5, none on track 1", n == 2u &&
+                 motion_count(&trk[0]) == 0u && motion_count(&trk[4]) == 2u);
+    motion_arm = 0;
+    song.sel = 0; motion_clear(&trk[4]); motion_set_ramp(&trk[4], 0);
+    ui_power_on();
+    go_page(GR_EVENTS); frame();
+    (void)auto_pick(EVC(EVK_ARM, 0));
+    turn(EN_K4, 1);
+    bad += check("REC is a track's own: ON for track 1, still OFF for track 2 and track 5", motion_armed(&trk[0]) && !motion_armed(&trk[1]) &&
+                 !motion_armed(&trk[4]) && motion_arm == 1u);
+    song.sel = 1; go_page(GR_EVENTS); frame();
+    (void)auto_pick(EVC(EVK_ARM, 0));
+    turn(EN_K4, 1);
+    bad += check("  turned on there: track 1 and 2 both armed, then track 1 off leaves track 2", motion_arm == 3u);
+    song.sel = 0; go_page(GR_EVENTS); frame();
+    (void)auto_pick(EVC(EVK_ARM, 0));
+    turn(EN_K4, -1);
+    bad += check("  (track 1 off: track 2 stays on)", motion_arm == 2u);
+    sig = graph_signature();
+    turn(EN_K4, 1);
+    ok = graph_signature() != sig;
+    sig = graph_signature();
+    (void)auto_pick(EVC(EVK_RMP, 0));
+    sig = graph_signature();
+    turn(EN_K4, 1);
+    ok &= graph_signature() != sig;
+    sig = graph_signature();
+    turn(EN_K4, -1);
+    ok &= graph_signature() != sig;
+    bad += check("the page's signature changes when REC and RAMP change (they are drawn on the spot, not after a page change)", ok);
+    motion_arm = 0; song.rec = 0; motion_set_ramp(&trk[0], 0);
+    return bad;
+}
 static int ramp_project(void)
 {
     int bad = 0;
@@ -258,6 +328,6 @@ static int ramp_ui(void)
 }
 int main(void)
 {
-    int bad = hold_and_ramp() + ramp_range() + ramp_lock_and_off() + ramp_record() + ramp_project() + ramp_ui();
+    int bad = hold_and_ramp() + ramp_range() + ramp_lock_and_off() + ramp_record() + track5_and_arm() + ramp_project() + ramp_ui();
     printf("%s\n", bad ? "RAMP TEST FAILED" : "ramp tests passed"); return bad != 0;
 }
