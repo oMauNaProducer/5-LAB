@@ -576,13 +576,66 @@ static uint32_t note_len(const track_t *t, uint32_t i)
 static uint32_t note_set_len(track_t *t, uint32_t i, uint32_t want)
 {
     uint32_t len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP), n = note_len(t, i);
+    uint8_t last = n > 1u ? t->step[i + n - 1u].vel : 0u;   /* (1.1.0: the new TIEs end the notes the last one ended) */
     for (; n > want && n > 1u; n--)
         step_clear(&t->step[i + n - 1u]);
     for (; n < want && i + n < len && !t->step[i + n].n && !t->step[i + n].hit; n++) {
         step_clear(&t->step[i + n]);
         t->step[i + n].time = ST_TIE;
+        t->step[i + n].vel = last;
     }
     return n;
+}
+/* 1.1.0: the length of note k of the chord at step i (its note[k]): the TIEs after the step that do not end it (seq.c tie_mask) */
+static uint32_t note_len_k(const track_t *t, uint32_t i, uint32_t k)
+{
+    uint32_t n = note_len(t, i), l = 1;
+    while (l < n && !((tie_mask(&t->step[i + l]) >> k) & 1u))
+        l++;
+    return l;
+}
+/* note k alone: longer (the TIEs it needs come as in note_set_len, ending the other notes), shorter (the TIEs no note holds
+ * any more become RESTs). Returns the length it got */
+static uint32_t note_set_len_k(track_t *t, uint32_t i, uint32_t k, uint32_t want)
+{
+    uint32_t len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP), n = note_len(t, i), x, m = 1, l;
+    uint32_t nn = t->step[i].n < 4u ? t->step[i].n : 4u;
+    uint32_t others = ((1u << nn) - 1u) & ~(1u << k);
+    if (want < 1u)
+        want = 1u;
+    for (x = n; x < want && i + x < len && !t->step[i + x].n && !t->step[i + x].hit; x++) {
+        step_clear(&t->step[i + x]);                  /* the chain grows: the other notes ended already */
+        t->step[i + x].time = ST_TIE;
+        t->step[i + x].vel = tie_vel(others);
+    }
+    n = note_len(t, i);
+    if (want > n)
+        want = n;
+    for (x = 1; x < n; x++) {
+        uint32_t m = tie_mask(&t->step[i + x]);
+        t->step[i + x].vel = tie_vel(x < want ? m & ~(1u << k) : m | (1u << k));
+    }
+    for (l = 0; l < nn; l++) {                        /* the chain is as long as the longest note */
+        uint32_t q = note_len_k(t, i, l);
+        if (q > m)
+            m = q;
+    }
+    for (; n > m && n > 1u; n--)
+        step_clear(&t->step[i + n - 1u]);
+    return note_len_k(t, i, k);
+}
+
+/* the note of step st a key held on the selected track plays (its index in st->note), -1: none (1.1.0: KNOB 3 on a held note) */
+static int held_note_idx(const step_t *st)
+{
+    uint32_t k, i, j;
+    for (k = 0; k < 27u; k++)
+        if (kb_chn[k] && kb_trk[k] == song.sel)
+            for (i = 0; i < kb_chn[k]; i++)
+                for (j = 0; j < st->n && j < 4u; j++)
+                    if (st->note[j] == kb_chord[k][i])
+                        return (int)j;
+    return -1;
 }
 
 /* ------------------------------------------------------- the DRUM grid --- */

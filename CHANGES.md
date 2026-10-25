@@ -1,11 +1,25 @@
 # 5-LAB: changes from Felucca 1.6.1
 
 5-LAB is a fork of [Felucca](https://github.com/hugelton/Felucca) 1.6.1 by Leo Kuroshita (Hügelton Instruments), GPL-3.0-only like the
-original. **Version 1.0.8** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
+original. **Version 1.1.0** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
 Five audio tracks, every engine on all five; the lab is for trying things out.
 
 Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything not listed here is Felucca 1.6.1 as it was
 (the sound is the same: the 98 golden renders of `tests/golden.txt` are unchanged).
+
+## 1.1.0: each note of a chord has its own length
+
+- **Length per note.** On SEQ > STEP, with a chord on the cursor step, **hold a note's key and turn KNOB 3 (LEN)**: that note alone gets longer or shorter,
+  while the others keep theirs (the column shows `NOTE` under the number). With **no key held** KNOB 3 is the whole chord as before (the notes that go on to the
+  end of the chain get the longer or shorter end; the ones that ended earlier keep theirs).
+- **How it is stored.** No new format: a TIE step's `vel` (unused on a TIE until now) holds `0x10 | mask`: bit k of the mask = the NOTE step's note k has
+  **ended before that TIE**. Any other `vel` (0, 96 ...) means all go on, which is every older project and recording: nothing changes for them, and an older
+  firmware plays a 1.1.0 project with all notes to the end of the chain. A note taken out of a chord, or a chord played over again, fixes its TIEs' bits.
+- **Sound.** The sequencer releases each note at its own end (the gate of the last step it covers); a pitch another note of the chord still holds goes on.
+- **Piano roll.** Each note is drawn with its own length; the notes that ended leave no bar over the TIEs after them.
+- Chains shorten to the longest note: when the longest note is shortened, the TIEs nobody holds any more become RESTs.
+- `track_t` grew by 6 bytes (the pad `rsv_sz` took them: same size, same 16-byte multiple). No change to the flash format or the other engines' sound.
+  Tests: `tests/notelen_test.c`.
 
 ## 1.0.8: the piano roll: a nudged note joins its ties, the slide runs across an overlap
 

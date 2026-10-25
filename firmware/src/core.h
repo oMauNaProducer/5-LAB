@@ -162,6 +162,10 @@ typedef struct {                 /* acid-style step: up to 4 notes (POLY), time,
     uint8_t acc;                 /* bit l: that hit is accented (velocity 127) */
     uint8_t probability;         /* 0 = legacy 100%; 1..100 = percent, 101 = silent; 1.5.5: 102..112 a condition */
 } step_t;
+/* 5-LAB 1.1.0: a chord's notes with lengths of their own. A TIE step's vel (unused on a TIE) = 0x10 | mask: bit k of the mask = note k of the
+ * NOTE step the TIEs follow ended before this TIE (seq.c, ui.c note_set_len_k). Any other vel (0, a project of before, a REST's 96 ...) is: all go on */
+static inline uint32_t tie_mask(const step_t *s) { return s->time == ST_TIE && (s->vel & 0x70u) == 0x10u ? (uint32_t)s->vel & 15u : 0u; }
+static inline uint8_t tie_vel(uint32_t m) { return (uint8_t)(m & 15u ? 0x10u | (m & 15u) : 0u); }
 typedef struct {                 /* a step as formats 1..4 (projects to FUN4) stored it: no hits */
     uint8_t note[4];
     uint8_t n, time, flags, vel;
@@ -286,6 +290,8 @@ typedef struct track {
     uint8_t seq_notes[4 + NLANE];   /* sounding seq notes (the step's notes, then its hits) */
     uint8_t seq_n;
     uint8_t seq_hold;            /* last step slides: keep the notes until the next step */
+    uint8_t seq_hp[4];           /* 1.1.0: the pitch each note of the playing step sounds (0 none), seq_rel the notes ending at the end of this step (a bit */
+    uint8_t seq_rel, seq_gone;   /* a note of the step: its TIEs' note mask), seq_gone those released already (seq.c seq_part_release) */
     uint8_t slide_glide;         /* next legato note glides (slide) */
     uint8_t rat_left;            /* RATCH: repeats of the playing step still to come (seq.c seq_ratchet) */
     uint32_t seq_off;
@@ -319,9 +325,9 @@ typedef struct track {
     uint8_t lfo_wrap;            /* the LFO's phase wrapped this block: its S&H is drawn after the parts (voice.c) */
     uint32_t esync_k[3];         /* ATK's step, DEC's and REL's coefficient (Q16) this block (voice.c esync_coef) */
     uint8_t spread_on;           /* SPREAD this block (fx.c mix_part, voice.c track_render) */
-    uint8_t rsv_sz[1];           /* (sizeof(track_t) a multiple of 16: below) */
+    uint8_t rsv_sz[15];          /* (sizeof(track_t) a multiple of 16: below) */
 #else
-    uint8_t rsv_sz[14];          /* (sizeof(track_t) a multiple of 16: below) */
+    uint8_t rsv_sz[12];          /* (sizeof(track_t) a multiple of 16: below) */
 #endif
     int16_t armp, aholdp;        /* P_AMODE / P_AHOLD as last seen by the ISR */
     /* engine switch (voice.c engine_block): the old engine's voices fade out, then it switches */

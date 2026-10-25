@@ -921,9 +921,13 @@ static void step_edit(uint32_t slot, int32_t steps)
         break;
     case 2:                                               /* TIME; a note's LEN (1.5: ui.c note_set_len) */
         if (step_on(st)) {
-            uint32_t was = note_len(TSEL, ui.cursor), n;
+            int hk = st->n > 1u ? held_note_idx(st) : -1;   /* 1.1.0: a key of the chord held: that note's LEN alone */
+            uint32_t was = hk >= 0 ? note_len_k(TSEL, ui.cursor, (uint32_t)hk) : note_len(TSEL, ui.cursor), n;
             step_undo_take(TSEL, 0x2000u);                /* (a knob turned on: one undo, SAVE held) */
-            n = note_set_len(TSEL, ui.cursor, (uint32_t)clamp((int32_t)was + steps, 1, NSTEP));
+            if (hk >= 0)
+                n = note_set_len_k(TSEL, ui.cursor, (uint32_t)hk, (uint32_t)clamp((int32_t)was + steps, 1, NSTEP));
+            else
+                n = note_set_len(TSEL, ui.cursor, (uint32_t)clamp((int32_t)was + steps, 1, NSTEP));
             motion_undo_done(TSEL);
             if (steps > 0 && n == was)
                 ui_message(ui.cursor + n < (uint32_t)clamp(TSEL->p[P_SLEN], 1, NSTEP) ? "NOTE AHEAD" : "END OF PATTERN");
@@ -1184,6 +1188,7 @@ static void step_toggle(const track_t *t, step_t *st, const uint8_t *ch, uint32_
         for (i = 0; i < n; i++)
             for (j = 0; j < st->n; j++)
                 if (st->note[j] == ch[i]) {
+                    tie_masks_fix((track_t *)t, (uint32_t)(st - t->step), j);   /* (1.1.0: its TIEs' masks lose that note) */
                     for (k = j; k + 1u < st->n; k++)
                         st->note[k] = st->note[k + 1u];
                     st->n--;
@@ -1196,6 +1201,7 @@ static void step_toggle(const track_t *t, step_t *st, const uint8_t *ch, uint32_
     if (t->p[P_VOICE] && !ENGINES[t->engine]->oneshot) {   /* MONO / LEG / UNI: one note */
         st->note[0] = ch[0];
         st->n = 1;
+        tie_masks_fix((track_t *)t, (uint32_t)(st - t->step), 4u);
         return;
     }
     for (i = 0; i < n && st->n < 4u; i++) {

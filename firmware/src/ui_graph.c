@@ -186,15 +186,18 @@ static int32_t pr_bar_w(const step_t *ns, int32_t nx, int32_t n, int32_t x, int3
     return w;
 }
 static void pr_bars(const step_t *st, int32_t x, int32_t w, uint16_t c, int acc_all, int32_t *first, uint32_t hits,
-                    const step_t *ns, int32_t nx)
+                    const step_t *ns, int32_t nx, uint32_t skip, uint32_t shrt)
 {
     uint32_t j;
     int32_t ybot = PR_Y0 + PR_ROWS * PR_RH;
     for (j = 0; j < 4u + NLANE; j++) {
-        int32_t n = pr_note(st, j), y, bw = hits == 1u ? pr_bar_w(ns, nx, n, x, w) : w;
+        int32_t n = pr_note(st, j), y, bw;
         int acc;
-        if (n < 0)
+        if (n < 0 || (j < 4u && ((skip >> j) & 1u)))   /* 1.1.0: a note that ended before this TIE: no bar */
             continue;
+        bw = j < 4u && ((shrt >> j) & 1u) ? 9 : w;      /* (one that ends with this step: its own width, not the TIEs') */
+        if (hits == 1u)
+            bw = pr_bar_w(ns, nx, n, x, bw);
         acc = acc_all || (j >= 4u && ((st->acc >> (j - 4u)) & 1u));
         y = pr_row_y(n);
         if (*first < -1000)
@@ -286,9 +289,10 @@ static void graph_roll(const track_t *t, uint16_t c)
                 bx = pr_nudge_x(t, st, x + 2, 9, ncol);
                 if (tie_next)                           /* 1.0.8: its ties go on from where its column ends: no gap after an early nudge */
                     bw = x + PR_CW - 1 - bx;
-                pr_bars(st, bx, bw, col, (st->flags & SF_ACCENT) != 0u, &y, step_ratchet(st), nb, nbx);
-            } else                                    /* a TIE: the bars on through the gap before */
-                pr_bars(st, x - 1, 12, col, (st->flags & SF_ACCENT) != 0u, &y, 1u, nb, nbx);
+                pr_bars(st, bx, bw, col, (st->flags & SF_ACCENT) != 0u, &y, step_ratchet(st), nb, nbx, 0u,
+                        tie_next ? tie_mask(&seq_steps(t)[nx]) : 0u);
+            } else                                    /* a TIE: the bars on through the gap before (the notes it holds) */
+                pr_bars(st, x - 1, 12, col, (st->flags & SF_ACCENT) != 0u, &y, 1u, nb, nbx, tie_mask(&seq_steps(t)[si]), 0u);
             if ((st->flags & SF_SLIDE) && step_ratchet(st) == 1u &&   /* (a ratcheted step never slides out) */
                 ns->time == ST_NOTE && ns->n && y >= PR_Y0 && y < ybot) {
                 int32_t ny = clamp(pr_row_y(ns->note[0]), PR_Y0, ybot - PR_RH);

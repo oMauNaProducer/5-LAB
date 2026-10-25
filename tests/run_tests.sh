@@ -273,6 +273,8 @@ if [ -f build/gen/felucca_tables.h ]; then
     run "5-LAB 1.0.3: RAMP, the automation events moving in a straight line to the next one (HOLD as Felucca), its project bit" "$OUT/ramp_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/nudge_roll_test" tests/nudge_roll_test.c -lm
     run "5-LAB 1.0.6: the piano roll draws a nudged bar where it plays (QUANTIZE OFF)" "$OUT/nudge_roll_test"
+    $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/notelen_test" tests/notelen_test.c -lm
+    run "5-LAB 1.1.0: a chord's notes with lengths of their own (TIE masks: sequencer, edit, roll)" "$OUT/notelen_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/ratchet_test" tests/ratchet_test.c -lm
     run "RATCH: x1..x4 in a step (notes, chords, drum hits), gates, chance, swing, projects, user presets, AUTOMATION RATCH rows" "$OUT/ratchet_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/step15_test" tests/step15_test.c -lm

@@ -216,6 +216,7 @@ static void arp_remove(track_t *t, uint32_t note)
 
 #define ND_NONE 0u                      /* track_t nd_late / nd_early: nothing latched (seq_tick; else its seq_pos + 1) */
 static void rec_note(track_t *t, uint32_t note, uint32_t vel);
+static void tie_masks_fix(track_t *t, uint32_t idx, uint32_t j);
 static void rec_release(track_t *t, uint32_t note);
 static int rec_on(const track_t *t) { return ((song.rec >> trk_index(t)) & 1u) && song.playing && !chain.running; }
 
@@ -529,6 +530,7 @@ static void rec_note(track_t *t, uint32_t note, uint32_t vel)
         s->flags = 0;
         s->vel = 0;
         step_set_nudge(s, off);
+        tie_masks_fix(t, idx, 4u);                  /* (1.1.0: its TIEs, if any, hold every note again) */
     }
     for (k = 0; k < s->n && s->note[k] != note; k++)
         ;
@@ -843,12 +845,52 @@ static void seq_start(void)
     perf_start();                                  /* perform.c: its 1/16 grid too */
 }
 
+/* 1.1.0: a chord's notes may have lengths of their own. A TIE step's `vel` (unused on a TIE: it plays nothing of its own) holds
+ * a note mask: bit k = note k of the NOTE step the TIEs follow (its note[k]) ended before this TIE step. 0 on every TIE of every
+ * older project and recording: all the notes go on, as they always did. A note that ended stays ended on the TIEs after it */
+#define TIE_NOTES 15u
+/* the notes of the NOTE step idx change (a fresh chord, a note taken out at j): its TIEs' masks follow, j = 4: all cleared */
+static void tie_masks_fix(track_t *t, uint32_t idx, uint32_t j)
+{
+    uint32_t len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP), x;
+    for (x = idx + 1u; x < len && t->step[x].time == ST_TIE; x++) {
+        uint32_t m = tie_mask(&t->step[x]);
+        t->step[x].vel = tie_vel(j >= 4u ? 0u : (m & ((1u << j) - 1u)) | (m >> (j + 1u)) << j);
+    }
+}
+/* the notes of the playing step in seq_rel end now: their note-offs (a pitch another note of the step still holds goes on) */
+static __attribute__((noinline)) void seq_part_release(track_t *t)
+{
+    uint32_t k, j, i, r = t->seq_rel;
+    t->seq_rel = 0;
+    for (k = 0; k < 4u; k++) {
+        uint8_t p = t->seq_hp[k];
+        if (!((r >> k) & 1u))
+            continue;
+        t->seq_gone |= (uint8_t)(1u << k);
+        if (!p)
+            continue;
+        for (j = 0; j < 4u && !(j != k && t->seq_hp[j] == p && !((t->seq_gone >> j) & 1u)); j++)
+            ;
+        if (j < 4u)
+            continue;                                   /* (two notes snapped onto one pitch: it goes with the last) */
+        trk_note_off(t, p);
+        for (i = 0; i < t->seq_n; i++)
+            if (t->seq_notes[i] == p) {
+                for (; i + 1u < t->seq_n; i++)
+                    t->seq_notes[i] = t->seq_notes[i + 1u];
+                t->seq_n--;
+                break;
+            }
+    }
+}
 static void seq_release(track_t *t)
 {
     uint32_t i;
     for (i = 0; i < t->seq_n; i++)
         trk_note_off(t, t->seq_notes[i]);
     t->seq_n = 0;
+    t->seq_rel = t->seq_gone = 0;
     t->seq_hold = 0;
     t->slide_glide = 0;                             /* live MONO / LEG keys must not glide after it */
 }
@@ -932,6 +974,8 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
     int32_t qtrn = qseq && t->p[P_QUANT] == QN_SEQT ? t->p[P_TRANS] : 0;
     if (!(skip & SEQ_REP)) {
         t->rat_left = 0;
+        if (t->seq_rel)
+            seq_part_release(t);                    /* (1.1.0: notes of the step before that ended with it, not yet off) */
         if ((skip & SEQ_MISS) || (!(skip & SEQ_ROLLED) && seq_miss(t, s, idx))) {
             seq_release(t);
             return;
@@ -941,6 +985,8 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
         if (t->seq_n) {
             t->seq_off = gate + period / 2u;
             t->seq_hold = (s->flags & SF_SLIDE) != 0 || next_tie;   /* chains hold at any GATE / swing */
+            if (next_tie)                                           /* 1.1.0: the notes the next TIE no longer holds end with this step */
+                t->seq_rel = (uint8_t)(tie_mask(&seq_steps(t)[(idx + 1u) % len]) & ~tie_mask(s) & ~(uint32_t)t->seq_gone & TIE_NOTES);
         }
         return;
     }
@@ -953,10 +999,13 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
         if (!(skip & SEQ_REP))
             t->rat_left = (uint8_t)(hits - 1u);
     }
+    memset(t->seq_hp, 0, sizeof t->seq_hp);
     for (i = 0; i < s->n && i < 4u; i++) {
         uint32_t x = s->note[i];
+        if (qseq)
+            x = (uint32_t)clamp(scale_snap(t, (int32_t)x + qtrn), 0, 127);
+        t->seq_hp[i] = (uint8_t)x;                  /* (1.1.0: the pitch of note i: a TIE can end it) */
         if (qseq) {                                 /* QNT SEQ: onto the scale now; two notes snapping */
-            x = (uint32_t)clamp(scale_snap(t, (int32_t)x + qtrn), 0, 127);   /* together play once */
             for (j = 0; j < m && nn[j] != x; j++)
                 ;
             if (j < m)
@@ -993,6 +1042,8 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
             t->seq_notes[t->seq_n++] = nn[i];
     t->seq_off = gate;
     t->seq_hold = hits == 1u && ((s->flags & SF_SLIDE) != 0 || next_tie);   /* next step a TIE: keep the notes to it */
+    t->seq_gone = 0;
+    t->seq_rel = hits == 1u && next_tie ? (uint8_t)(tie_mask(&seq_steps(t)[(idx + 1u) % len]) & ((1u << (s->n < 4u ? s->n : 4u)) - 1u)) : 0u;
 }
 
 /* MENU > CONTROL > STEP PREVIEW (1.2, Discussion #169): the UI asks for a step of a track to sound once (aud_req: step
@@ -1014,7 +1065,7 @@ static __attribute__((noinline)) void seq_audition(void)
     t->seq_idx = (uint16_t)idx;
     seq_step(t, &t->step[idx], idx, div_samples(2), SEQ_ROLLED);
     t->seq_idx = at;
-    t->seq_hold = 0;
+    t->seq_hold = 0; t->seq_rel = t->seq_gone = 0;
     t->rat_left = 0;
 }
 
@@ -1169,10 +1220,13 @@ static __attribute__((noinline)) void seq_ramp(track_t *t, uint32_t period)
 static void seq_tick(track_t *t, uint32_t n)
 {
     uint32_t period, len, top;
-    if (t->seq_n && !t->seq_hold) {
-        if (t->seq_off <= n)
-            seq_release(t);
-        else
+    if (t->seq_n && (!t->seq_hold || t->seq_rel)) {
+        if (t->seq_off <= n) {
+            if (t->seq_hold)
+                seq_part_release(t);                   /* (1.1.0: some notes of a chord end, the others go on) */
+            else
+                seq_release(t);
+        } else
             t->seq_off -= n;
     }
     if (!song.playing)
@@ -1356,7 +1410,7 @@ static void events_block(uint32_t n)
         midi_hint = 0;
         for (i = 0; i < NTRK; i++) {
             trk[i].rh_n = trk[i].rskip_n = 0;
-            trk[i].seq_n = trk[i].seq_hold = trk[i].slide_glide = trk[i].rat_left = 0;
+            trk[i].seq_n = trk[i].seq_hold = trk[i].seq_rel = trk[i].seq_gone = trk[i].slide_glide = trk[i].rat_left = 0;
         }
         pr |= (1u << NTRK) - 1u;
         RING_PUBLISH();
