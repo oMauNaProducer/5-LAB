@@ -15,6 +15,8 @@ Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything n
   (1280 bytes, "FT5A"), 5120 bytes in all; the record in the first sector is written last, over a CRC of both. The four slots and the autosave are in
   the flash of the old third sample slot (0xC8000..0xDBFFF, 20 sectors); the object can grow to 7936 bytes, room for more tracks or data
   without another format. (`storage.c` `st_save2` / `st_load2`, `project.c` `proj_flash_pair*`; `tests/storage_test.c` cuts a save at every byte.)
+- **No extra RAM.** The two sectors are read and written in 256-byte chunks straight from/to the project's buffers (the CRC runs over the chunks), so the
+  shared flash buffer stays one sector's and the build's pool headroom check (8 KB) holds.
 - **Your projects.** A slot with no FUN11 object yet (Felucca's, or 5-LAB 1.0.0's) loads its FUN10 as before, track 5 empty; it becomes FUN11 at its next
   save. 1.0.0's separate track-5 objects are not read: **track 5 of a project saved by 1.0.0 is lost at the update** (the other four tracks, the name and the
   globals load). The first FUN11 save of a slot ends the old object's say for it, and an erased slot stays empty. The autosave behaves the same.

@@ -16,7 +16,8 @@
 #define ST_SECTOR 4096u
 #define ST_PAYLOAD_OFF 256u
 #define ST_PAYLOAD_MAX (ST_SECTOR - ST_PAYLOAD_OFF)
-#define ST_BIG_MAX (ST_PAYLOAD_MAX + ST_SECTOR)        /* an object of two sectors a copy: the payload goes on in the second, from its start */
+#define ST_BIG_MAX (ST_PAYLOAD_MAX + ST_SECTOR)        /* an object of two sectors a copy: the payload goes on in the second, from its start
+                                                        * (read and written in 256-byte chunks: st_buf stays one sector's) */
 
 /* flash map (FL_DATA 0x97000..0xDFFFF, FL_GLOB 0xFC000.., FL_AUTO 0xE5000..0xE6FFF, FL_VBANK 0xE7000): settings 0xFC000, projects
  * 0x97000..0x9EFFF, user sample slots 0xA0000..0xC7FFF (eng_sample.c: two since 5-LAB; the third's flash, 0xC8000..0xD1FFF,
@@ -85,7 +86,7 @@ static uint32_t st_sector(uint32_t obj, uint32_t copy)  /* flash offset of copy 
     return 0x97000u + (obj - OBJ_PROJECT0) * 2u * ST_SECTOR + copy * ST_SECTOR;
 }
 
-static uint8_t st_buf[ST_BIG_MAX] __attribute__((aligned(4), section(".pool")));   /* (main loop only) */
+static uint8_t st_buf[ST_PAYLOAD_MAX] __attribute__((aligned(4), section(".pool")));   /* (main loop only) */
 
 static int st_big(uint32_t obj) { return obj >= OBJ_PROJ11_0 && obj < OBJ_COUNT; }   /* two sectors a copy */
 static int st_live(uint32_t obj) { return obj < OBJ_COUNT && (obj < OBJ_RETIRED5_0 || obj >= OBJ_PROJ11_0); }
@@ -102,19 +103,48 @@ static int st_head(uint32_t obj, uint32_t copy, st_hdr_t *h)   /* commit record 
     return 0;
 }
 
-static int st_body(uint32_t obj, uint32_t copy, const st_hdr_t *h)   /* payload -> st_buf, CRC ok: 0 */
+/* flash address of payload byte p of a copy: a big object's goes on at the start of its second sector */
+static uint32_t st_pay_at(uint32_t obj, uint32_t copy, uint32_t p)
 {
-    uint32_t n1 = h->len > ST_PAYLOAD_MAX ? ST_PAYLOAD_MAX : h->len;
-    if (st_read(st_sector(obj, copy) + ST_PAYLOAD_OFF, st_buf, n1) ||
-        (h->len > n1 && st_read(st_sector(obj, copy) + ST_SECTOR, st_buf + n1, h->len - n1)) ||
-        st_crc32(st_buf, h->len) != h->crc)
+    return p < ST_PAYLOAD_MAX ? st_sector(obj, copy) + ST_PAYLOAD_OFF + p : st_sector(obj, copy) + ST_SECTOR + (p - ST_PAYLOAD_MAX);
+}
+/* a big object's payload bytes [from, from + n) -> dst (from and n in 256s except the last: a chunk never straddles the sectors) */
+static int st_pay_read(uint32_t obj, uint32_t copy, uint32_t from, void *dst, uint32_t n)
+{
+    uint32_t done = 0;
+    while (done < n) {
+        uint32_t p = from + done, room = p < ST_PAYLOAD_MAX ? ST_PAYLOAD_MAX - p : 0x7FFFFFFFu, c = n - done < room ? n - done : room;
+        if (st_read(st_pay_at(obj, copy, p), (uint8_t *)dst + done, c))
+            return -1;
+        done += c;
+    }
+    return 0;
+}
+
+/* a one-sector object: payload -> st_buf, CRC ok: 0. A big object (5 KB of a project would not fit st_buf, and the pool has no
+ * room for a second one): the CRC is checked in 256-byte chunks and the payload stays in flash (st_load / st_load2 read it
+ * from there) */
+static int st_body(uint32_t obj, uint32_t copy, const st_hdr_t *h)
+{
+    if (st_big(obj)) {
+        uint8_t tmp[256];
+        uint32_t c = 0xFFFFFFFFu, p;
+        for (p = 0; p < h->len; p += 256u) {
+            uint32_t n = h->len - p > 256u ? 256u : h->len - p;
+            if (st_pay_read(obj, copy, p, tmp, n))
+                return -1;
+            c = st_crc32_add(c, tmp, n);
+        }
+        return ~c == h->crc ? 0 : -1;
+    }
+    if (st_read(st_sector(obj, copy) + ST_PAYLOAD_OFF, st_buf, h->len) || st_crc32(st_buf, h->len) != h->crc)
         return -1;
     return 0;
 }
 
 /* the current copy: the newest valid sequence (A on a tie), -1 when
- * neither is valid. Headers first, so only the winner's payload is read (it
- * is left in st_buf); *h gets its header. */
+ * neither is valid. Headers first, so only the winner's payload is read (a
+ * one-sector object's is left in st_buf); *h gets its header. */
 static int st_current(uint32_t obj, st_hdr_t *h)
 {
     st_hdr_t a, b;
@@ -142,8 +172,11 @@ static int st_load(uint32_t obj, void *dst, uint32_t max)
 {
     uint32_t i;
     st_hdr_t h;
-    if (!st_live(obj) || st_current(obj, &h) < 0 || h.len > max)
+    int cur;
+    if (!st_live(obj) || (cur = st_current(obj, &h)) < 0 || h.len > max)
         return -1;
+    if (st_big(obj))
+        return st_pay_read(obj, (uint32_t)cur, 0, dst, h.len) ? -1 : (int)h.len;
     for (i = 0; i < h.len; i++)
         ((uint8_t *)dst)[i] = st_buf[i];
     return (int)h.len;
@@ -154,59 +187,69 @@ static int st_load(uint32_t obj, void *dst, uint32_t max)
  * -2 a record of another length (b is not touched then) */
 static int st_load2(uint32_t obj, void *a, uint32_t alen, void *b, uint32_t blen)
 {
-    uint32_t i;
     st_hdr_t h;
-    if (!st_live(obj) || st_current(obj, &h) < 0)
+    int cur;
+    if (!st_live(obj) || !st_big(obj) || (cur = st_current(obj, &h)) < 0)
         return -1;
     if (h.len == 0u)
         return 0;
     if (h.len != alen + blen)
         return -2;
-    for (i = 0; i < alen; i++)
-        ((uint8_t *)a)[i] = st_buf[i];
-    for (i = 0; i < blen; i++)
-        ((uint8_t *)b)[i] = st_buf[alen + i];
+    if (st_pay_read(obj, (uint32_t)cur, 0, a, alen) || (blen && st_pay_read(obj, (uint32_t)cur, alen, b, blen)))
+        return -1;
     return (int)h.len;
 }
 
 /* save a (alen bytes) then b (blen; b may be 0) as one record into copy `to` (0 A, 1 B; -1: the one that is not the
- * current copy, as st_save). A big object (two sectors a copy) erases both, programs the payload (the second sector
- * from its start), and commits with the record in the FIRST sector last: a cut anywhere before it leaves no valid
- * header there, so the copy is ignored whole and the other (the previous record) stays in charge */
+ * current copy, as st_save). A big object (two sectors a copy) erases the sectors it needs, programs the payload in
+ * 256-byte pages straight from a and b (the second sector from its start; no copy of it in st_buf), and commits with the
+ * record in the FIRST sector last: a cut anywhere before it leaves no valid header there, so the copy is ignored whole and
+ * the other (the previous record) stays in charge */
 static int st_save_parts(uint32_t obj, const void *a, uint32_t alen, const void *b, uint32_t blen, int to)
 {
-    uint32_t seq, base, off, len = alen + blen, n1;
+    uint32_t seq, base, off, len = alen + blen, crc = 0xFFFFFFFFu;
     int cur, rc;
     st_hdr_t h;
-    if (!st_live(obj) || len > (st_big(obj) ? ST_BIG_MAX : ST_PAYLOAD_MAX) || to > 1)
+    if (!st_live(obj) || len > (st_big(obj) ? ST_BIG_MAX : ST_PAYLOAD_MAX) || to > 1 || (blen && !st_big(obj)))
         return -1;
     cur = st_current(obj, &h);
     seq = cur < 0 ? 0u : h.seq;
     if (to < 0)
         to = cur == 0 ? 1 : 0;                        /* write the other copy */
     base = st_sector(obj, (uint32_t)to);
-    for (off = 0; off < alen; off++)
-        st_buf[off] = ((const uint8_t *)a)[off];      /* the driver wants RAM sources */
-    for (off = 0; off < blen; off++)
-        st_buf[alen + off] = ((const uint8_t *)b)[off];
-    if ((rc = st_erase(base)) != 0)
-        return rc;
-    if (len > ST_PAYLOAD_MAX && (rc = st_erase(base + ST_SECTOR)) != 0)     /* (the second sector only when the record goes into it:
-                                                                            * an empty record is one erase) */
-        return rc;
-    n1 = len > ST_PAYLOAD_MAX ? ST_PAYLOAD_MAX : len;
-    for (off = 0; off < len; off += 256u) {
-        uint32_t n = len - off > 256u ? 256u : len - off;
-        uint32_t at = off < n1 ? base + ST_PAYLOAD_OFF + off : base + ST_SECTOR + (off - n1);
-        if ((rc = st_prog(at, st_buf + off, n)) != 0)
+    if (!st_big(obj)) {
+        for (off = 0; off < len; off++)
+            st_buf[off] = ((const uint8_t *)a)[off];  /* the driver wants RAM sources */
+        if ((rc = st_erase(base)) != 0)
             return rc;
+        for (off = 0; off < len; off += 256u) {
+            uint32_t n = len - off > 256u ? 256u : len - off;
+            if ((rc = st_prog(base + ST_PAYLOAD_OFF + off, st_buf + off, n)) != 0)
+                return rc;
+        }
+        crc = st_crc32_add(crc, st_buf, len);
+    } else {
+        uint8_t tmp[256];
+        if ((rc = st_erase(base)) != 0)
+            return rc;
+        if (len > ST_PAYLOAD_MAX && (rc = st_erase(base + ST_SECTOR)) != 0)   /* (the second sector only when the record goes into it:
+                                                                              * an empty record is one erase) */
+            return rc;
+        for (off = 0; off < len; off += 256u) {
+            uint32_t n = len - off > 256u ? 256u : len - off, i;
+            for (i = 0; i < n; i++)
+                tmp[i] = off + i < alen ? ((const uint8_t *)a)[off + i] : ((const uint8_t *)b)[off + i - alen];
+            crc = st_crc32_add(crc, tmp, n);
+            if ((rc = st_prog(st_pay_at(obj, (uint32_t)to, off), tmp, n)) != 0)
+                return rc;
+        }
     }
     h.magic = ST_MAGIC;
     h.type = (uint16_t)obj;
     h.slot = (uint16_t)to;
     h.seq = seq + 1u;
     h.len = len;
-    h.crc = st_crc32(st_buf, len);
+    h.crc = ~crc;
     h.rsv[0] = h.rsv[1] = 0xFFFFFFFFu;
     h.hcrc = st_crc32(&h, sizeof h - 4u);
     if ((rc = st_prog(base, &h, sizeof h)) != 0)       /* the commit record, last */
