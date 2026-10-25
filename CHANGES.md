@@ -1,11 +1,23 @@
 # 5-LAB: changes from Felucca 1.6.1
 
 5-LAB is a fork of [Felucca](https://github.com/hugelton/Felucca) 1.6.1 by Leo Kuroshita (Hügelton Instruments), GPL-3.0-only like the
-original. **Version 1.0.3** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
+original. **Version 1.0.4** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
 Five audio tracks, every engine on all five; the lab is for trying things out.
 
 Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything not listed here is Felucca 1.6.1 as it was
 (the sound is the same: the 98 golden renders of `tests/golden.txt` are unchanged).
+
+## 1.0.4: RAMP records the corners of a knob turn, not every step
+
+- **Why.** With REC, PLAY and the automation REC row on, a knob turned from step 1 to step 12 wrote a record on every step it passed, 12 of the 128
+  for what RAMP can play back from two.
+- **What.** On a track in RAMP, a recorded turn keeps its corners: the start, the end and where the turn changes direction or pauses. Turn the LEVEL
+  straight up over 12 steps: 2 records. Up and then down: 3 (the peak). A point that lies on the line of its neighbours, within 3 % of the parameter's
+  range, is not kept. In HOLD (the default) nothing changes: every step is a record, as the staircase needs.
+- **Over an older recording.** A turn recorded over earlier records of the same parameter replaces those between its start and its end; the ones outside
+  it and the locks stay.
+- No change to the project format, flash or RAM (a few bytes of state for four gestures at a time).
+- Tests: `tests/ramp_test.c` records turns (a line, up and down, up / pause / up, over an older recording, in HOLD) and counts the records.
 
 ## 1.0.3: RAMP, automation events that move to the next one (SEQ > AUTOMATION > RAMP)
 

@@ -64,11 +64,13 @@ static int motion_enabled(const track_t *t) { return (motion.on >> trk_index(t))
  * Felucca; 1 = RAMP: from one event to the next of the same parameter the value moves in a straight line). A setting
  * of the track, saved in the project (FUN10 rsv[0] for tracks 1..4, PROJ5 for the fifth), not an undo step */
 static void motion_restore(track_t *t);
+static void motion_gest_reset(void);
 static int motion_ramping(const track_t *t) { return (motion.rsv[0] >> trk_index(t)) & 1u; }
 static void motion_set_ramp(track_t *t, uint32_t on)
 {
     uint32_t f = motion_guard(), b = 1u << trk_index(t);
     motion.rsv[0] = (uint8_t)(on ? motion.rsv[0] | b : motion.rsv[0] & ~b);
+    motion_gest_reset();
     if (!on) motion_restore(t);                     /* (the value a ramp left goes back to the base: the next step's event sets it) */
     motion_unguard(f);
 }
@@ -146,6 +148,7 @@ static void motion_rebase(track_t *t)
 static void motion_begin(void)
 {
     uint32_t k;
+    motion_gest_reset();
     for (k = 0; k < NTRK; k++) {
         motion_restore(&trk[k]);
         memcpy(motion_base[k], trk[k].p, sizeof trk[k].p);
@@ -154,6 +157,7 @@ static void motion_begin(void)
 }
 static void motion_end(void)
 {
+    motion_gest_reset();
     for (uint32_t k = 0; k < NTRK; k++) motion_restore(&trk[k]);
     motion_base_valid = 0;
 }
@@ -167,6 +171,7 @@ static void motion_set_enabled(track_t *t, uint32_t on)
 static void motion_clear(track_t *t)
 {
     uint32_t f = motion_guard(), k = trk_index(t), i, n = 0;
+    motion_gest_reset();
     motion_restore(t);
     for (i = 0; i < motion.count; i++)
         if ((motion.event[i].place >> 6) != k) motion.event[n++] = motion.event[i];
@@ -232,6 +237,105 @@ static uint32_t motion_clear_locks(track_t *t, uint32_t step)
     motion_unguard(f);
     return gone;
 }
+/* 5-LAB RAMP recording: a knob turned on a track in RAMP leaves the corners of the gesture, not a record for every step the
+ * knob passed. Per (track, parameter) the gesture is its anchor A (the last corner kept), the middle point M (the last step
+ * the knob left) and the current point C (the step it is in, its value following the knob). While M lies on the line from A
+ * to C (within 3 % of the parameter's range) it is not stored; when the turn bends (a new direction, a pause) it is, and it
+ * becomes the anchor. The records of the parameter that were there before, between the last point and the new one, are
+ * dropped: the new line replaces them. A few gestures at a time; they end when the transport starts or stops, the track's
+ * automation is cleared, the playhead goes back, or the points are changed by hand */
+typedef struct { uint8_t used, k, id, hasa, hasm, mp, as, ms, cs; int8_t av, mv, cv; } ramp_gest_t;
+static ramp_gest_t ramp_g[4];
+static uint8_t ramp_g_next;
+static void motion_gest_reset(void) { memset(ramp_g, 0, sizeof ramp_g); ramp_g_next = 0; }
+/* the record of kind 0 at (k, step, id): its index, -1 none */
+static int32_t motion_find_ev(uint32_t k, uint32_t step, uint32_t id)
+{
+    uint32_t i;
+    for (i = 0; i < motion.count; i++)
+        if (motion.event[i].place == (k << 6 | step) && motion.event[i].param == id)
+            return (int32_t)i;
+    return -1;
+}
+/* drops the records of kind 0 of (k, id) at steps lo..hi (the guard is the caller's) */
+static void motion_drop_span(uint32_t k, uint32_t id, uint32_t lo, uint32_t hi)
+{
+    uint32_t i, n = 0;
+    for (i = 0; i < motion.count; i++) {
+        const motion_event_t *e = &motion.event[i];
+        uint32_t s = e->place & 63u;
+        if ((e->place >> 6) == k && e->param == id && s >= lo && s <= hi) continue;
+        motion.event[n++] = *e;
+    }
+    memset(motion.event + n, 0, (MOTION_MAX - n) * sizeof motion.event[0]);
+    motion.count = (uint8_t)n;
+    motion_full = 0;
+}
+/* M is stored exactly while it is off the line A - C (3 % of the range, and half a step of the slope: the records sit on whole steps) */
+static void motion_gest_eval(track_t *t, ramp_gest_t *g, int32_t tol)
+{
+    int32_t span, ve, dv;
+    uint32_t f;
+    if (!g->hasa || !g->hasm || g->cs <= g->as)
+        return;
+    span = (int32_t)g->cs - g->as;
+    ve = g->av + ((int32_t)g->cv - g->av) * ((int32_t)g->ms - g->as) / span;
+    dv = (int32_t)g->mv - ve;
+    dv = dv < 0 ? -dv : dv;
+    ve = (int32_t)g->cv - g->av;                     /* (the steps are whole: half a step of the line's slope more) */
+    tol += (ve < 0 ? -ve : ve) / (2 * span);
+    if (dv <= tol && g->mp) {
+        f = motion_guard();
+        motion_drop_span(g->k, g->id, g->ms, g->ms);
+        motion_unguard(f);
+        g->mp = 0;
+    } else if (dv > tol && !g->mp) {
+        if (!motion_set_event(t, g->ms, g->id, g->mv))
+            g->mp = 1;
+    }
+}
+static int motion_capture_ramp(track_t *t, uint32_t idx, uint32_t id, int16_t value)
+{
+    uint32_t k = trk_index(t), i, f;
+    const param_desc_t *d = param_desc_of(eng_idx(t->eng_req), id);
+    int32_t tol = ((int32_t)d->max - d->min) * 3 / 100;
+    ramp_gest_t *g = 0;
+    int r;
+    if (tol < 1) tol = 1;
+    for (i = 0; i < 4u; i++)
+        if (ramp_g[i].used && ramp_g[i].k == k && ramp_g[i].id == id) g = &ramp_g[i];
+    if (g && (motion_find_ev(k, g->cs, id) < 0 || idx < g->cs))      /* the point is gone, or the playhead went back: a new gesture */
+        g->used = 0, g = 0;
+    if (!g) {
+        r = motion_set_event(t, idx, id, value);
+        if (r) return r;
+        g = &ramp_g[ramp_g_next++ & 3u];
+        memset(g, 0, sizeof *g);
+        g->used = 1; g->k = (uint8_t)k; g->id = (uint8_t)id; g->cs = (uint8_t)idx; g->cv = (int8_t)value;
+        return 0;
+    }
+    if (idx == g->cs) {                              /* the same step: the value follows the knob */
+        r = motion_set_event(t, idx, id, value);
+        if (!r) { g->cv = (int8_t)value; motion_gest_eval(t, g, tol); }
+        return r;
+    }
+    if (idx > g->cs + 1u) {                          /* what was recorded before, between the point it left and this one */
+        f = motion_guard();
+        motion_drop_span(k, id, g->cs + 1u, idx - 1u);
+        motion_unguard(f);
+    }
+    r = motion_set_event(t, idx, id, value);
+    if (r) return r;
+    if (!g->hasa) {                                  /* the first step is left: it is the anchor */
+        g->hasa = 1; g->as = g->cs; g->av = g->cv;
+    } else {                                         /* the step left becomes the middle point (the old one, if it stayed, the anchor) */
+        if (g->hasm && g->mp) { g->as = g->ms; g->av = g->mv; }
+        g->hasm = 1; g->mp = 1; g->ms = g->cs; g->mv = g->cv;
+    }
+    g->cs = (uint8_t)idx; g->cv = (int8_t)value;
+    motion_gest_eval(t, g, tol);
+    return 0;
+}
 static int motion_capture(track_t *t, uint32_t id, int16_t value)
 {
     uint32_t k = trk_index(t), idx, len, period, f;
@@ -253,6 +357,8 @@ static int motion_capture(track_t *t, uint32_t id, int16_t value)
      * quantized step still restores the original patch. */
     if ((motion_base_valid >> k) & 1u) motion_active[k][id / 32u] |= 1u << (id % 32u);
     motion_unguard(f);
+    if (motion_ramping(t))
+        return motion_capture_ramp(t, idx, id, value);
     return motion_set_event(t, idx, id, value);
 }
 /* step `step` starts: the locks of the step before go back to what sounds without them: the latest automation event
