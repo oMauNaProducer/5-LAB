@@ -23,7 +23,7 @@ Changes of this fork against 1.6.1, all of them visible on the wire:
 - full backup: ids **10..14** are the fifth track's half of the music (10, with id 0) and of the slots A..D (11..14, with ids
   2..5); 1280 bytes or 0 (none); a half names the project it belongs to, so restore ids 11..14 after their ids 2..5 and id 10
   right after id 0. The sample slots are ids 32 and 33 (id 34 is gone). The list has 17 objects.
-- projects: FUN10 keeps its 4-track layout; the fifth track lives in a linked 1280-byte companion in flash (FT5A). A song
+- projects: FUN10 keeps its 4-track layout; the fifth track is a 1280-byte block (FT5A) that 5-LAB 1.0.1 stores in the same flash object as the FUN10 record ("FUN11", two sectors a copy; 1.0.0 kept it in an object of its own). The archive (ids 0..14) is the same. A song
   saved here reads on firmware 1.6.1 as a project of four tracks (the fifth is dropped); older projects load with track 5 at its power-on sound.
 
 Where the text below says "the four tracks" it is describing 1.x: read it as the `NTRK` tracks (the 128 motion records are shared by all five).

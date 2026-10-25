@@ -118,8 +118,8 @@ int main(void)
                                st_sector(OBJ_AUTOSAVE, 1) == 0xE6000u;
         static uint8_t snap[0x100000];
         for (o = 0; o < OBJ_COUNT; o++)
-            for (c = 0; c < 2u && o != OBJ_AUTOSAVE; c++)
-                ok &= st_sector(o, c) + 4096u <= 0xE5000u || st_sector(o, c) >= 0xE7000u;
+            for (c = 0; c < 2u && o != OBJ_AUTOSAVE && st_live(o); c++)
+                ok &= st_sector(o, c) + (st_big(o) ? 8192u : 4096u) <= 0xE5000u || st_sector(o, c) >= 0xE7000u;
         memcpy(snap, nor, sizeof nor);
         ok &= st_save(OBJ_AUTOSAVE, a, sizeof a) == 0 && st_load(OBJ_AUTOSAVE, got, sizeof got) == (int)sizeof a &&
               !memcmp(got, a, sizeof a) && !memcmp(snap, nor, 0xE5000u) && !memcmp(snap + 0xE7000u, nor + 0xE7000u, 0x19000u);
@@ -201,6 +201,108 @@ int main(void)
         memset(got, 'X', sizeof got);
         bad += check("small destination rejects whole object", st_load(OBJ_PROJECT0, got, sizeof got - 1u) < 0 && got[0] == 'X');
         bad += check("oversized save rejected", st_save(OBJ_PROJECT0, a, ST_PAYLOAD_MAX + 1u) < 0);
+    }
+    {   /* 5-LAB 1.0.1, FUN11: an object of two sectors a copy (the FUN10 record then the fifth track's block) */
+        static uint8_t pa[3840], pb[1280], qa[3840], qb[1280], ra[3840], rb[1280], blob[5120];
+        uint32_t i, o, c, cut, ok_map = 1;
+        int ok = 1;
+        for (i = 0; i < sizeof pa; i++) pa[i] = (uint8_t)(i * 5u + 1u);
+        for (i = 0; i < sizeof pb; i++) pb[i] = (uint8_t)(i * 11u + 3u);
+        for (i = 0; i < sizeof qa; i++) qa[i] = (uint8_t)(i * 7u + 2u);
+        for (i = 0; i < sizeof qb; i++) qb[i] = (uint8_t)(i * 13u + 5u);
+        memset(nor, 0xFF, sizeof nor);
+        bad += check("FUN11: the map is 5 objects x A/B x 2 sectors in 0xC8000..0xDBFFF, no other object there",
+                     OBJ_PROJ11_0 == OBJ_RETIRED5_0 + 5 && OBJ_AUTOSAVE11 == OBJ_PROJ11_0 + 4 && OBJ_COUNT == OBJ_AUTOSAVE11 + 1 &&
+                     st_sector(OBJ_PROJ11_0, 0) == 0xC8000u && st_sector(OBJ_PROJ11_0, 1) == 0xCA000u &&
+                     st_sector(OBJ_AUTOSAVE11, 1) + 8192u == 0xDC000u && OBJ_FM6VB >= OBJ_COUNT);
+        for (o = 0; o < OBJ_COUNT; o++)
+            for (c = 0; c < 2u; c++) {
+                uint32_t lo = st_sector(o, c), hi = lo + (st_big(o) ? 8192u : 4096u), o2, c2;
+                if (!st_live(o)) continue;
+                for (o2 = o + 1u; o2 < OBJ_COUNT; o2++)
+                    for (c2 = 0; c2 < 2u; c2++) {
+                        uint32_t lo2 = st_sector(o2, c2), hi2 = lo2 + (st_big(o2) ? 8192u : 4096u);
+                        if (st_live(o2) && lo < hi2 && lo2 < hi && !((o == OBJ_UPFM6 || o == OBJ_FM6BANK) && (o2 == OBJ_UPFM6 || o2 == OBJ_FM6BANK)))
+                            ok_map = 0;
+                    }
+            }
+        bad += check("FUN11: no two live objects share a sector (the FM6 patches / retired bank pair aside)", ok_map);
+        bad += check("FUN11: a retired 1.0.0 number is no object (no flash access)",
+                     !st_live(OBJ_RETIRED5_0) && !st_live(OBJ_RETIRED5_0 + 4) && st_load(OBJ_RETIRED5_0 + 1, got, sizeof got) < 0 &&
+                     st_save(OBJ_RETIRED5_0 + 2, a, sizeof a) < 0);
+        bad += check("FUN11: nothing yet -> -1 (the caller reads the older FUN10 object)",
+                     st_load2(OBJ_PROJ11_0 + 1, ra, sizeof ra, rb, sizeof rb) == -1);
+        bad += check("FUN11: save, load both parts", st_save2(OBJ_PROJ11_0 + 1, pa, sizeof pa, pb, sizeof pb) == 0 &&
+                     st_load2(OBJ_PROJ11_0 + 1, ra, sizeof ra, rb, sizeof rb) == 5120 && !memcmp(ra, pa, sizeof pa) &&
+                     !memcmp(rb, pb, sizeof pb));
+        {   /* where the bytes are: the record in sector 0 (payload from 256), the payload goes on at the start of sector 1 */
+            const uint8_t *s0 = nor + st_sector(OBJ_PROJ11_0 + 1, 0);
+            memcpy(blob, pa, sizeof pa); memcpy(blob + sizeof pa, pb, sizeof pb);
+            bad += check("FUN11: first copy = header + 3840 bytes in sector 0, the last 1280 at the start of sector 1",
+                         !memcmp(s0 + ST_PAYLOAD_OFF, blob, ST_PAYLOAD_MAX) && !memcmp(s0 + ST_SECTOR, blob + ST_PAYLOAD_MAX, 5120u - ST_PAYLOAD_MAX) &&
+                         s0[ST_SECTOR + 5120u - ST_PAYLOAD_MAX] == 0xFFu);
+        }
+        bad += check("FUN11: the second save goes to the other copy, the first stays", st_save2(OBJ_PROJ11_0 + 1, qa, sizeof qa, qb, sizeof qb) == 0 &&
+                     st_load2(OBJ_PROJ11_0 + 1, ra, sizeof ra, rb, sizeof rb) == 5120 && !memcmp(ra, qa, sizeof qa) && !memcmp(rb, qb, sizeof qb) &&
+                     !st_head(OBJ_PROJ11_0 + 1, 0, &(st_hdr_t){0}) && !st_head(OBJ_PROJ11_0 + 1, 1, &(st_hdr_t){0}));
+        {   /* power lost at every byte of the third save: the previous record (qa, qb) always loads whole */
+            uint8_t save[4u * 4096u];
+            uint32_t off = st_sector(OBJ_PROJ11_0 + 1, 0);
+            memcpy(save, nor + off, sizeof save);
+            for (cut = 0; cut < 5120u + sizeof(st_hdr_t); cut++) {
+                memcpy(nor + off, save, sizeof save);
+                fail_bytes = (int)cut;
+                ok &= st_save2(OBJ_PROJ11_0 + 1, pa, sizeof pa, pb, sizeof pb) != 0;
+                fail_bytes = -1;
+                memset(ra, 0, sizeof ra); memset(rb, 0, sizeof rb);
+                ok &= st_load2(OBJ_PROJ11_0 + 1, ra, sizeof ra, rb, sizeof rb) == 5120 && !memcmp(ra, qa, sizeof qa) && !memcmp(rb, qb, sizeof qb);
+            }
+            memcpy(nor + off, save, sizeof save);
+            bad += check("FUN11: power lost at any byte of a save (5152 cuts): the previous project and block, whole", ok);
+            ok = 1;
+            for (cut = 0; cut < 3u; cut++) {   /* an erase / program that fails outright, in either sector */
+                fail_after = (int)cut * 8;
+                ok &= st_save2(OBJ_PROJ11_0 + 1, pa, sizeof pa, pb, sizeof pb) != 0;
+                fail_after = -1;
+                ok &= st_load2(OBJ_PROJ11_0 + 1, ra, sizeof ra, rb, sizeof rb) == 5120 && !memcmp(ra, qa, sizeof qa) && !memcmp(rb, qb, sizeof qb);
+                memcpy(nor + off, save, sizeof save);
+            }
+            erase_error = 1;
+            ok &= st_save2(OBJ_PROJ11_0 + 1, pa, sizeof pa, pb, sizeof pb) != 0;
+            erase_error = 0;
+            ok &= st_load2(OBJ_PROJ11_0 + 1, ra, sizeof ra, rb, sizeof rb) == 5120 && !memcmp(ra, qa, sizeof qa);
+            bad += check("FUN11: a failed program / erase keeps the previous record", ok);
+        }
+        {   /* only the second sector of the newest copy rots: that copy is refused whole, the older one loads */
+            uint32_t cur = (uint32_t)st_current(OBJ_PROJ11_0 + 1, &(st_hdr_t){0});
+            nor[st_sector(OBJ_PROJ11_0 + 1, cur) + ST_SECTOR + 100u] ^= 0x04u;
+            memset(ra, 0, sizeof ra); memset(rb, 0, sizeof rb);
+            ok = st_load2(OBJ_PROJ11_0 + 1, ra, sizeof ra, rb, sizeof rb);
+            bad += check("FUN11: a flipped bit in the second sector refuses that copy (CRC over both), the other copy loads",
+                         ok == 5120 && !memcmp(ra, pa, sizeof pa) && !memcmp(rb, pb, sizeof pb));
+        }
+        {   /* a record of 1.0.0's retired type where a FUN11 copy's header would be is nobody's */
+            st_hdr_t h;
+            uint32_t at = st_sector(OBJ_PROJ11_0 + 2, 0);
+            memset(&h, 0, sizeof h);
+            h.magic = ST_MAGIC; h.type = OBJ_RETIRED5_0 + 2u; h.slot = 0; h.seq = 7; h.len = 1280; h.crc = st_crc32(pb, 1280);
+            h.rsv[0] = h.rsv[1] = 0xFFFFFFFFu; h.hcrc = st_crc32(&h, sizeof h - 4u);
+            memcpy(nor + at, &h, sizeof h); memcpy(nor + at + ST_PAYLOAD_OFF, pb, 1280);
+            bad += check("FUN11: a stale 1.0.0 fifth-track record in the new sectors is not an object", st_load2(OBJ_PROJ11_0 + 2, ra, sizeof ra, rb, sizeof rb) == -1);
+        }
+        bad += check("FUN11: an empty record loads as 0 (not -1: the older FUN10 object is then ignored)",
+                     st_save(OBJ_PROJ11_0 + 3, ra, 0) == 0 && st_load2(OBJ_PROJ11_0 + 3, ra, sizeof ra, rb, sizeof rb) == 0);
+        bad += check("FUN11: a record of another length is -2 and leaves the destination alone",
+                     st_save(OBJ_PROJ11_0, a, sizeof a) == 0 && (memset(rb, 0x5A, sizeof rb), st_load2(OBJ_PROJ11_0, ra, sizeof ra, rb, sizeof rb)) == -2 && rb[0] == 0x5A);
+        bad += check("FUN11: up to 7936 bytes fit, one more is refused; a one-sector object still stops at 3840",
+                     st_save(OBJ_AUTOSAVE11, blob, 0) == 0 && ST_BIG_MAX == 7936u && st_save(OBJ_AUTOSAVE11, nor, ST_BIG_MAX) == 0 &&
+                     st_save(OBJ_AUTOSAVE11, nor, ST_BIG_MAX + 1u) < 0 && st_save(OBJ_PROJECT0, nor, ST_PAYLOAD_MAX + 1u) < 0);
+        {   /* the largest record: the second sector full to its last byte */
+            static uint8_t big[ST_BIG_MAX], back[ST_BIG_MAX];
+            for (i = 0; i < sizeof big; i++) big[i] = (uint8_t)(i * 31u + 7u);
+            ok = st_save(OBJ_AUTOSAVE11, big, sizeof big) == 0 && st_load(OBJ_AUTOSAVE11, back, sizeof back) == (int)sizeof big && !memcmp(big, back, sizeof big);
+            bad += check("FUN11: a record of the whole 7936 bytes round trips", ok);
+        }
     }
     printf("%s\n", bad ? "STORAGE TEST FAILED" : "storage test passed");
     return bad != 0;

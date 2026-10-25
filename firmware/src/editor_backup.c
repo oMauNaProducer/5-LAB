@@ -10,6 +10,8 @@
  * 5-LAB: ids 10 (the music as it is) and 11..14 (slots A..D) are the fifth track's half of ids 0 and 2..5 (project.c
  * PROJ5: 1280 bytes, or none); a restore puts a half after its project, and a half names the project it belongs to
  * (its link): one that is not the project restored before it is refused. The user samples are ids 32 and 33 (no USR3).
+ * 1.0.1 (FUN11) stores a project and its block as ONE flash object: restoring ids 2..5 writes the project with an empty
+ * block (valid as it is), the id 11..14 that follows writes it again with its block. The archive itself is unchanged.
  */
 static const uint8_t ED_BK_IDS[17] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 32, 33};
 #define ED_BK_N ((uint32_t)sizeof ED_BK_IDS)
@@ -117,7 +119,7 @@ static uint32_t ed_bk_commit(void)
             if (!ed_bk_len) return 2;
             return project_restore_runtime(&proj_scratch) ? 2u : 0u;
         }
-        obj = OBJ_PROJECT0 + ed_bk_id - 2u;
+        obj = OBJ_PROJ11_0 + ed_bk_id - 2u;         /* (FUN11: the project alone now; its fifth track's block follows as id 11..14) */
     } else if (ed_bk_id == 10u) {                   /* 5-LAB: the fifth track's half of the music restored with id 0 */
         if (!ed_bk_len) return 0;                   /* (none: the track stays at its power-on sound) */
         if (ed_bk_len != PROJ5_SIZE) return 2;
@@ -129,7 +131,7 @@ static uint32_t ed_bk_commit(void)
         if (ed_bk_len && (ed_bk_len != PROJ5_SIZE || ((const uint32_t *)raw)[0] != PROJ5_MAGIC ||
                           ((const uint32_t *)raw)[2] != proj_link(&proj_slot[ed_bk_id - 11u]) ||
                           ((const uint32_t *)raw)[PROJ5_SIZE / 4u - 1u] != proj_hash(raw, PROJ5_SIZE - 4u))) return 2;
-        obj = OBJ_PROJ5_0 + ed_bk_id - 11u;
+        obj = OBJ_PROJ11_0 + ed_bk_id - 11u;
     } else if (ed_bk_id == 1u) {
         const persist_t *p = (const persist_t *)raw;
         if (ed_bk_len != sizeof *p || p->magic != PERSIST_MAGIC || !palette_stored_ok(p->palette) ||
@@ -155,7 +157,20 @@ static uint32_t ed_bk_commit(void)
         return upf_save() == 2 ? 4u : 0u;           /* (a failed write keeps the restored RAM copy) */
     } else return 1;
 #if FELUCCA_FLASH
-    if (!flash_ok || st_save(obj, raw, ed_bk_len)) return 4;
+    if (!flash_ok) return 4;
+    if (st_big(obj)) {                              /* FUN11: the FUN10 record and the fifth track's block, one object */
+        static const uint8_t none5[PROJ5_SIZE];
+        int bad;
+        if (ed_bk_id >= 11u && !ed_bk_len)          /* (no block: the slot's FUN11 object already holds none) */
+            bad = 0;
+        else if (ed_bk_id >= 11u)                   /* the block joins the project restored just before (in RAM) */
+            bad = st_save2(obj, &proj_slot[ed_bk_id - 11u], sizeof proj_slot[0], raw, PROJ5_SIZE);
+        else if (!ed_bk_len)                        /* an empty slot */
+            bad = st_save(obj, raw, 0);
+        else
+            bad = st_save2(obj, raw, sizeof(project_store_t), none5, PROJ5_SIZE);
+        if (bad) return 4;
+    } else if (st_save(obj, raw, ed_bk_len)) return 4;
 #else
     (void)obj;
 #endif

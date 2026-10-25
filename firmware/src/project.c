@@ -867,7 +867,8 @@ static int proj_unpack(project_t *q, const uint8_t *b, uint32_t st)
     return 1;
 }
 
-/* ---- PROJ5 (5-LAB, "FT5A"): the fifth track's half of a project, its own storage object (storage.c OBJ_PROJ5_*).
+/* ---- PROJ5 (5-LAB, "FT5A"): the fifth track's block of a project. Since 1.0.1 (FUN11) it is stored in the same flash object
+ * as the FUN10 record (storage.c OBJ_PROJ11_*, FUN10 then this block); 1.0.0 kept it in an object of its own.
  * 1280 bytes: magic, size, LINK (the hash FUN10 ends with: this object belongs to that FUN10 and no other: a FUN10 saved
  * since by firmware without tracks 5 leaves it unlinked, and the track starts as at power-on), np, the track's MIDI IN
  * channel (as song.mch), whether the track was the selected one, its automation switch, then the track as FUN10 stores one (parameters, engine,
@@ -1037,25 +1038,40 @@ static void proj_bound(project_t *q)
 }
 
 #if FELUCCA_FLASH
-/* proj_wire / proj_wire5 -> slot's two flash objects: the half first (it names the FUN10 that follows). If the FUN10 then
- * fails, the half before it (A/B) still names the FUN10 that is there: proj_half_load takes that one. 0 saved */
+/* 5-LAB 1.0.1, FUN11: proj_wire (the FUN10 record) and proj_wire5 (the fifth track's block) -> slot's ONE flash object
+ * (storage.c OBJ_PROJ11_0 + slot: two sectors a copy, committed together, so a project and its fifth track are never of two
+ * saves). 0 saved */
 static int proj_flash_pair(uint32_t slot)
 {
-    slot &= 3u;
-    if (st_save(OBJ_PROJ5_0 + slot, &proj_wire5, sizeof proj_wire5))
-        return 1;
-    return st_save(OBJ_PROJECT0 + slot, &proj_wire, sizeof proj_wire) ? 1 : 0;
+    return st_save2(OBJ_PROJ11_0 + (slot & 3u), &proj_wire, sizeof proj_wire, &proj_wire5, sizeof proj_wire5) ? 1 : 0;
 }
-/* the fifth-track half object (OBJ_PROJ5_0 + slot, OBJ_AUTOSAVE5) from flash for the FUN10 whose hash is `link`: the newest copy if it names it, else the copy
- * before it; 1 found (dst), 0 none */
-static int proj_half_load(uint32_t obj, uint32_t link, proj5_store_t *dst)
+/* the FUN11 object `obj11` into proj_wire / proj_wire5. A slot that never had one (no valid copy: a Felucca's or 5-LAB 1.0.0's
+ * project) reads its FUN10 from `obj0` as before (the fifth track empty: 1.0.0's separate block is not read). Returns
+ * what st_load does for the FUN10 part (its length; 0 an empty slot; -1 nothing) and *have5: the block is the project's */
+static int proj_flash_pair_load(uint32_t obj11, uint32_t obj0, int *have5)
 {
-    uint32_t pass;
-    for (pass = 0; pass < 2u; pass++) {
-        int n = pass ? st_load_prev(obj, dst, sizeof *dst) : st_load(obj, dst, sizeof *dst);
-        if (n == (int)PROJ5_SIZE && ((const uint32_t *)dst->raw)[0] == PROJ5_MAGIC && ((const uint32_t *)dst->raw)[2] == link)
-            return 1;
+    int r = st_load2(obj11, &proj_wire, sizeof proj_wire, &proj_wire5, sizeof proj_wire5);
+    *have5 = 0;
+    if (r == -1) {                                    /* no FUN11 object yet: the FUN10 alone */
+        memset(&proj_wire5, 0, sizeof proj_wire5);
+        return st_load(obj0, &proj_wire, sizeof proj_wire);
     }
+    if (r != (int)(sizeof proj_wire + sizeof proj_wire5)) {   /* empty (0) or of another length */
+        memset(&proj_wire5, 0, sizeof proj_wire5);
+        return r == 0 ? 0 : -1;
+    }
+    *have5 = ((const uint32_t *)proj_wire.raw)[0] == PROJ_MAGIC && ((const uint32_t *)proj_wire5.raw)[0] == PROJ5_MAGIC &&
+             ((const uint32_t *)proj_wire5.raw)[2] == proj_link(&proj_wire);
+    return (int)PROJ_STORE_SIZE;
+}
+/* the block of FUN11 object `obj11` if it belongs to the FUN10 whose hash is `link` (a retained RAM slot at power-on): 1 found
+ * (dst), 0 none. Uses proj_wire */
+static int proj_half_load(uint32_t obj11, uint32_t link, proj5_store_t *dst)
+{
+    int r = st_load2(obj11, &proj_wire, sizeof proj_wire, dst, sizeof *dst);
+    if (r == (int)(sizeof proj_wire + sizeof *dst) && ((const uint32_t *)dst->raw)[0] == PROJ5_MAGIC &&
+        ((const uint32_t *)dst->raw)[2] == link && proj_link(&proj_wire) == link)
+        return 1;
     memset(dst, 0, sizeof *dst);
     return 0;
 }
@@ -1069,10 +1085,8 @@ static void proj_fetch(uint32_t slot)
     proj5_store_t *q5 = &proj_slot5[slot & 3u];
     int n, have5;
     proj_wire_gen++;
-    n = st_load(OBJ_PROJECT0 + (slot & 3u), &proj_wire, sizeof proj_wire);
+    n = proj_flash_pair_load(OBJ_PROJ11_0 + (slot & 3u), OBJ_PROJECT0 + (slot & 3u), &have5);
     memset(q5, 0, sizeof *q5);
-    have5 = n == (int)PROJ_STORE_SIZE && ((const uint32_t *)proj_wire.raw)[0] == PROJ_MAGIC &&
-            proj_half_load(OBJ_PROJ5_0 + (slot & 3u), proj_link(&proj_wire), &proj_wire5);
     if (!proj_import5(&proj_scratch, &proj_wire, n, have5 ? &proj_wire5 : 0))
         memset(q->raw, 0, 4);
     else {
@@ -1260,7 +1274,7 @@ static int project_erase(uint32_t slot)
         return 1;
     }
 #if FELUCCA_FLASH
-    if (flash_ok && st_save(OBJ_PROJECT0 + slot, &proj_wire, 0)) {   /* (its fifth-track half stays: it names a FUN10 that is gone) */
+    if (flash_ok && st_save(OBJ_PROJ11_0 + slot, &proj_wire, 0)) {   /* (an empty FUN11 record: a Felucca's FUN10 there is not read then) */
         ui_message("ERASE ERROR");
         return 2;
     }
@@ -1419,7 +1433,7 @@ static void persist_boot(void)                    /* before settings_init / pane
             if (!proj_import(&proj_scratch, &proj_slot[i], sizeof(project_store_t)))
                 proj_fetch(i);
             else if (((const uint32_t *)proj_slot[i].raw)[0] == PROJ_MAGIC)   /* (the retained FUN10 stays; its fifth-track */
-                (void)proj_half_load(OBJ_PROJ5_0 + i, proj_link(&proj_slot[i]), &proj_slot5[i]);       /* half is not retained: from flash) */
+                (void)proj_half_load(OBJ_PROJ11_0 + i, proj_link(&proj_slot[i]), &proj_slot5[i]);      /* half is not retained: from flash) */
     }
     up_boot();                                     /* user presets */
 #endif
@@ -1607,8 +1621,7 @@ static void autosave_poll(void)
     project_capture(&proj_scratch);
     proj_wire_gen++;
     as.err = !proj_pack_pair(&proj_wire, &proj_wire5, &proj_scratch) ||
-             st_save(OBJ_AUTOSAVE5, &proj_wire5, sizeof proj_wire5) != 0 ||        /* (the half first, as a save) */
-             st_save(OBJ_AUTOSAVE, &proj_wire, sizeof proj_wire) != 0;
+             st_save2(OBJ_AUTOSAVE11, &proj_wire, sizeof proj_wire, &proj_wire5, sizeof proj_wire5) != 0;   /* (one object, as a save) */
     if (!as.err) {
         as.saved = sig;
         as.writes++;
@@ -1626,9 +1639,7 @@ static int autosave_boot(int allowed)
     if (flash_ok && allowed && !(ui_prefs & PREF_RESTORE_OFF)) {
         int n, have5;
         proj_wire_gen++;
-        n = st_load(OBJ_AUTOSAVE, &proj_wire, sizeof proj_wire);
-        have5 = n == (int)PROJ_STORE_SIZE && ((const uint32_t *)proj_wire.raw)[0] == PROJ_MAGIC &&
-                proj_half_load(OBJ_AUTOSAVE5, proj_link(&proj_wire), &proj_wire5);
+        n = proj_flash_pair_load(OBJ_AUTOSAVE11, OBJ_AUTOSAVE, &have5);
         if (n > 0 && proj_import5(&proj_scratch, &proj_wire, n, have5 ? &proj_wire5 : 0)) {
             proj_bound(&proj_scratch);
             if (!project_restore_runtime(&proj_scratch)) {
@@ -1647,6 +1658,7 @@ static int autosave_boot(int allowed)
 
 #if FELUCCA_FLASH
 _Static_assert(sizeof(project_store_t) <= ST_PAYLOAD_MAX, "project does not fit one flash sector");
+_Static_assert(sizeof(project_store_t) + sizeof(proj5_store_t) <= ST_BIG_MAX, "FUN11 does not fit its two sectors");
 _Static_assert(sizeof(persist_t) <= ST_PAYLOAD_MAX, "settings do not fit one flash sector");
 #endif
 #endif /* PROJ_HOST */

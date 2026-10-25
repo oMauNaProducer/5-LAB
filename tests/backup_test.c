@@ -170,7 +170,8 @@ static uint32_t get(uint32_t id, uint32_t off, uint32_t count)
 
 int main(void)
 {
-    int bad = 0;
+    int bad = 0, ok;
+    proj5_store_t fh5;
     uint32_t len = 0, crc = 0, before;
     static project_store_t st;
     static project_v6_t v6;
@@ -279,7 +280,30 @@ int main(void)
     proj_pack(&st, &proj_scratch);
     bad += check("a FUN10 project restores into slot 3 (flash and RAM)",
                  put_all(4, &st, sizeof st, st_crc32(&st, sizeof st)) == 0 && project_used(2) &&
-                 !memcmp(&proj_slot[2], &st, sizeof st) && st_load(OBJ_PROJECT0 + 2, &proj_wire, sizeof proj_wire) == (int)sizeof st);
+                 !memcmp(&proj_slot[2], &st, sizeof st) &&
+                 st_load2(OBJ_PROJ11_0 + 2, &proj_wire, sizeof proj_wire, &fh5, sizeof fh5) == (int)(sizeof st + sizeof fh5) &&
+                 !memcmp(&proj_wire, &st, sizeof st));
+    {   /* FUN11 (1.0.1): the fifth track's block (id 13 = slot C) joins the project restored before it, in the same object */
+        proj5_store_t b5;
+        trk[4].p[P_LEVEL] = 66;
+        project_capture(&proj_scratch);
+        proj_pack_pair(&st, &b5, &proj_scratch);
+        ok = put_all(4, &st, sizeof st, st_crc32(&st, sizeof st)) == 0 &&
+             st_load2(OBJ_PROJ11_0 + 2, &proj_wire, sizeof proj_wire, &fh5, sizeof fh5) == (int)(sizeof st + sizeof fh5) &&
+             ((uint32_t *)fh5.raw)[0] != PROJ5_MAGIC;                    /* (alone: a valid project, no block yet) */
+        ok &= put_all(13, &b5, sizeof b5, st_crc32(&b5, sizeof b5)) == 0 &&
+              st_load2(OBJ_PROJ11_0 + 2, &proj_wire, sizeof proj_wire, &fh5, sizeof fh5) == (int)(sizeof st + sizeof fh5) &&
+              !memcmp(&proj_wire, &st, sizeof st) && !memcmp(&fh5, &b5, sizeof b5) && !memcmp(&proj_slot5[2], &b5, sizeof b5);
+        bad += check("a restored block (id 13) is written with its project as one object (and is in RAM)", ok);
+        ok = put_all(13, &b5, 0, st_crc32(&b5, 0)) == 0 && !memcmp(&proj_slot5[2], &fh5, 0) &&
+             st_load2(OBJ_PROJ11_0 + 2, &proj_wire, sizeof proj_wire, &fh5, sizeof fh5) == (int)(sizeof st + sizeof fh5) &&
+             !memcmp(&fh5, &b5, sizeof b5);
+        bad += check("  an archive without a block leaves the object's as it is", ok);
+        b5.raw[100] ^= 1;                                               /* a block that does not match its hash */
+        ok = put_all(13, &b5, sizeof b5, st_crc32(&b5, sizeof b5)) != 0;
+        bad += check("  a damaged block is refused", ok);
+        trk[4].p[P_LEVEL] = TP[P_LEVEL].def;
+    }
     {   /* FUN8 of 1.0.x (3584 bytes, 91 parameters) and FUN9 of 1.1 (3648, 99): restore as FUN10, E0 at P_E0, lanes
          * 100 %, the four 1.2 parameters at their defaults; a FUN9 with 64 motion records keeps them all */
         static uint8_t v8[3584], v9[3648];

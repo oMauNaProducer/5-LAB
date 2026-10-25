@@ -27,16 +27,19 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
 #include "../firmware/src/ui.c"
 #include "../firmware/src/menu_items.c"
 static void panel_setup(void) {}
+static int fl_main(uint32_t slot, void *dst);
+static int fl_empty(uint32_t slot);
 
 static uint8_t nor[0x100000], flash_ok = 1;
 static int erase_error, fail_after = -1;
 static char got_name[16];
-static uint32_t erases, as_erases;               /* (as_erases: the autosave's two sectors, 0xE5000 / 0xE6000) */
+#define FL_MAIN(slot, dst) fl_main((slot), (dst))           /* the FUN10 part of a slot's FUN11 object: its length, -1 none */
+static uint32_t erases, as_erases;               /* (as_erases: the autosave's writes, FUN11: a record into either copy at 0xD8000 / 0xDA000) */
 static int st_read(uint32_t off, void *dst, uint32_t n) { memcpy(dst, nor + off, n); return 0; }
 static int st_erase(uint32_t off)
 {
     erases++;
-    as_erases += off >= 0xE5000u && off < 0xE7000u;
+    as_erases += off == 0xD8000u || off == 0xDA000u;
     if (erase_error) return -8;
     memset(nor + off, 0xFF, 4096);
     return 0;
@@ -258,6 +261,24 @@ static void as_edit(uint32_t i)                          /* a change a project h
     s->note[0] = (uint8_t)(20u + (s->note[0] + 1u + n++ % 50u) % 100u);
     s->vel = 100;
 }
+static int fl_main(uint32_t slot, void *dst)
+{
+    proj5_store_t h5;
+    return st_load2(OBJ_PROJ11_0 + slot, dst, sizeof(project_store_t), &h5, sizeof h5) == (int)(sizeof(project_store_t) + sizeof h5) ?
+           (int)sizeof(project_store_t) : -1;
+}
+static int fl_main_auto(void *dst)
+{
+    proj5_store_t h5;
+    return st_load2(OBJ_AUTOSAVE11, dst, sizeof(project_store_t), &h5, sizeof h5) == (int)(sizeof(project_store_t) + sizeof h5) ?
+           (int)sizeof(project_store_t) : -1;
+}
+static int fl_empty(uint32_t slot)
+{
+    proj5_store_t h5;
+    project_store_t m;
+    return st_load2(OBJ_PROJ11_0 + slot, &m, sizeof m, &h5, sizeof h5) == 0;
+}
 static int autosave_test(void)
 {
     int bad = 0, ok;
@@ -275,7 +296,7 @@ static int autosave_test(void)
     ok = !as.writes;
     as_run(1500u);
     bad += check("autosave: a change: no write within 10 s, one once idle 10 s (one erase)",
-                 ok && as.writes == 1u && as_erases == 1u && st_load(OBJ_AUTOSAVE, &raw, sizeof raw) == (int)sizeof raw);
+                 ok && as.writes == 1u && as_erases == 1u && fl_main_auto(&raw) == (int)sizeof raw);
     as_run(600000u);
     bad += check("autosave: 10 min unchanged after it: no more writes", as.writes == 1u && as_erases == 1u);
     song.g[G_SLOT] = 3;                                  /* (the PROJECT page's pick, the selected track: not the music) */
@@ -359,23 +380,23 @@ static int autosave_test(void)
         autosave_boot(1);
         song.g[G_BPM] = 111;                             /* a newer copy into the other sector */
         as_run(11000u);
-        cur = st_current(OBJ_AUTOSAVE, &h);
-        nor[st_sector(OBJ_AUTOSAVE, (uint32_t)cur) + ST_PAYLOAD_OFF + 100u] ^= 0x10u;   /* its payload: the CRC fails */
-        other = st_current(OBJ_AUTOSAVE, &h);
+        cur = st_current(OBJ_AUTOSAVE11, &h);
+        nor[st_sector(OBJ_AUTOSAVE11, (uint32_t)cur) + ST_PAYLOAD_OFF + 100u] ^= 0x10u;   /* its payload: the CRC fails */
+        other = st_current(OBJ_AUTOSAVE11, &h);
         as_power_on();
         ok = cur >= 0 && other == !cur && autosave_boot(1) == 1 && song.g[G_BPM] == 97;
         bad += check("autosave: the newest copy damaged: the copy before it is restored", ok);
-        nor[st_sector(OBJ_AUTOSAVE, (uint32_t)other) + 12u] ^= 0x01u;   /* the other one's header too */
+        nor[st_sector(OBJ_AUTOSAVE11, (uint32_t)other) + 12u] ^= 0x01u;   /* the other one's header too */
         as_power_on();
         ok = autosave_boot(1) == 0 && song.g[G_BPM] != 97 && song.g[G_BPM] != 111;
         bad += check("autosave: both copies damaged: ignored, power-on as new", ok);
-        memset(nor + 0xE5000u, 0xFF, 0x2000u);
-        st_save(OBJ_AUTOSAVE, "NOT A PROJECT", 13u);     /* a valid record that is no project */
+        memset(nor + 0xD8000u, 0xFF, 0x4000u);
+        st_save(OBJ_AUTOSAVE11, "NOT A PROJECT", 13u);     /* a valid record that is no project */
         as_power_on();
         bad += check("autosave: a record that is no project: ignored", autosave_boot(1) == 0 && song.g[G_BPM] != 97);
     }
     /* a power cut in the middle of a write: the copy before stays in charge */
-    memset(nor + 0xE5000u, 0xFF, 0x2000u);
+    memset(nor + 0xD8000u, 0xFF, 0x4000u);
     as_power_on();
     autosave_boot(1);
     as_edit(8);
@@ -419,6 +440,27 @@ static int autosave_test(void)
         printf("persist:   worst case, 8 h of a change every 11 s: %u writes (%u per sector)\n", (unsigned)as_erases,
                (unsigned)(as_erases / 2u));
         bad += check("autosave wear, worst case: at most one write a minute (480 in 8 h)", as_erases <= 8u * 60u + 1u);
+    }
+    {   /* a Felucca's (or 1.0.0's) autosave, FUN10 alone in the old object: restored while no FUN11 autosave exists */
+        project_store_t old;
+        reset();
+        as_power_on();
+        song.g[G_BPM] = 133;
+        project_capture(&proj_scratch);
+        proj_pack(&old, &proj_scratch);
+        memset(nor + 0xD8000u, 0xFF, 0x4000u);
+        st_save(OBJ_AUTOSAVE, &old, sizeof old);
+        as_power_on();
+        ok = autosave_boot(1) == 1 && song.g[G_BPM] == 133;
+        bad += check("autosave: only an old FUN10 autosave: restored (no fifth track)", ok);
+        memset(nor + 0xD8000u, 0xFF, 0x4000u);
+        song.g[G_BPM] = 140;
+        as_edit(3);
+        as_run(11000u);
+        st_save(OBJ_AUTOSAVE, &old, sizeof old);          /* (the old object holds the older music again) */
+        as_power_on();
+        ok = autosave_boot(1) == 1 && song.g[G_BPM] == 140;
+        bad += check("autosave: once the FUN11 one exists the old object is never read", ok);
     }
     return bad;
 }
@@ -553,7 +595,7 @@ int main(void)
     project_save(0);
     fail_after = -1;
     bad += check("failed project save keeps RAM and old flash", !strcmp(ui.msg, "SAVE ERROR") &&
-                  !memcmp(&proj_slot[0], &old, sizeof old) && st_load(OBJ_PROJECT0, &got, sizeof got) == (int)sizeof got &&
+                  !memcmp(&proj_slot[0], &old, sizeof old) && FL_MAIN(0, &got) == (int)sizeof got &&
                   !memcmp(&got, &old, sizeof got));
     project_save(0);
     bad += check("successful project save publishes new RAM", !strcmp(ui.msg, "SAVED") &&
@@ -582,7 +624,7 @@ int main(void)
         fail_after = 1;
         bad += check("failed project rename: SAVE ERROR, the slot and flash as they were",
                       project_rename(0, "DUB") == 2 && !strcmp(ui.msg, "SAVE ERROR") && !memcmp(&proj_slot[0], &keep, sizeof keep) &&
-                      st_load(OBJ_PROJECT0, &got, sizeof got) == (int)sizeof got && !memcmp(&got, &keep, sizeof got));
+                      FL_MAIN(0, &got) == (int)sizeof got && !memcmp(&got, &keep, sizeof got));
         fail_after = -1;
         before = erases;
         transport_req = 1;
@@ -593,17 +635,21 @@ int main(void)
                       !strcmp(ui.msg, "RENAMED") && (memset(proj_slot[0].raw, 0, 8), proj_fetch(0), project_name(0, n)) &&
                       !strcmp(n, "DUB") && proj_scratch.t[0].step[0].note[0] == st0.note[0]);
     }
-    {   /* 5-LAB: the fifth track's half is its own flash object, linked to the FUN10 */
+    {   /* 5-LAB 1.0.1 (FUN11): the fifth track's block is in the project's own flash object, committed with it */
         project_store_t keep4;
         track_t *t5 = &trk[4];
+        proj5_store_t h5;
         int ok5;
         t5->p[P_LEVEL] = 77; t5->p[P_PAN] = -11;
         t5->step[6].time = ST_NOTE; t5->step[6].n = 1; t5->step[6].note[0] = 61; t5->step[6].vel = 90;
         mch_set(4, 9);
         chain_config.count = 1; chain_config.row[0] = chain_row_of(0, 1); chain_config.row[0].slot[4] = 2;
         (void)project_save(2);
-        ok5 = !project_save_as(2, "T5 SONG") && st_load(OBJ_PROJ5_0 + 2, &proj_wire5, sizeof proj_wire5) == (int)PROJ5_SIZE;
-        bad += check("a save writes the fifth track's half beside the project (its own object)", ok5);
+        ok5 = !project_save_as(2, "T5 SONG") && st_load2(OBJ_PROJ11_0 + 2, &proj_wire, sizeof proj_wire, &h5, sizeof h5) == (int)(sizeof proj_wire + sizeof h5) &&
+              ((uint32_t *)h5.raw)[0] == PROJ5_MAGIC && ((uint32_t *)h5.raw)[2] == proj_link(&proj_wire);
+        bad += check("a save writes the project and the fifth track's block as ONE flash object (the block names its project)", ok5);
+        ok5 = st_load(OBJ_PROJECT0 + 2, &got, sizeof got) < 0 && st_load2(OBJ_PROJ11_0 + 2, &proj_wire, sizeof proj_wire, &h5, sizeof h5) > 0;
+        bad += check("  .. and writes nothing to the old FUN10 object, nor a separate block object", ok5);
         t5->p[P_LEVEL] = 1; t5->step[6].time = ST_REST; mch_set(4, 4); chain_config.row[0].slot[4] = CHAIN_SILENT;
         memset(proj_slot[2].raw, 0, 8); memset(&proj_slot5[2], 0, sizeof proj_slot5[2]);       /* (RAM lost: back from flash) */
         proj_fetch(2);
@@ -612,38 +658,66 @@ int main(void)
                      t5->p[P_LEVEL] == 77 && t5->p[P_PAN] == -11 && t5->step[6].time == ST_NOTE && t5->step[6].note[0] == 61 &&
                      mch_get(4) == 9u && chain_config.row[0].slot[4] == 2u);
         keep4 = proj_slot[2];
-        st_save(OBJ_PROJ5_0 + 2, "NOT A HALF", 10u);                                          /* records that are no half (both copies) */
-        st_save(OBJ_PROJ5_0 + 2, "NOT A HALF", 10u);
+        memset(&h5, 0x6B, sizeof h5);                                                         /* a block that is no block, beside a good project */
+        st_save2(OBJ_PROJ11_0 + 2, &proj_slot[2], sizeof proj_slot[2], &h5, sizeof h5);
         memset(proj_slot[2].raw, 0, 8); memset(&proj_slot5[2], 0, sizeof proj_slot5[2]);
         proj_fetch(2);
         t5->p[P_LEVEL] = 1;
         project_load(2);
-        bad += check("  a flash half that is no half: the project loads, track 5 at its power-on sound",
+        bad += check("  a flash block that is no block: the project loads, track 5 at its power-on sound",
                      project_used(2) && t5->preset == TRK_DEF[4][1] && t5->engine == TRK_DEF[4][0] && t5->step[6].time == ST_REST &&
                      !memcmp(&proj_slot[2], &keep4, sizeof keep4));
         t5->p[P_LEVEL] = 77; mch_set(4, 9);
-        (void)project_save(2);                                                               /* (a good half again) */
-        fail_after = 6;                                                                      /* the half passes (5 programs + record), the FUN10 fails */
+        (void)project_save(2);                                                               /* (a good block again) */
+        fail_after = 12;                                                                     /* the write stops inside the payload (20 programs + the record) */
         before = erases;
         ok5 = project_save_as(2, "NEW NAME") == 2 && !strcmp(ui.msg, "SAVE ERROR");
         fail_after = -1;
         memset(proj_slot[2].raw, 0, 8); memset(&proj_slot5[2], 0, sizeof proj_slot5[2]);
         proj_fetch(2);
         project_name(2, got_name);
-        bad += check("  a save whose FUN10 fails: the old project and its own half still there (the half before is taken)",
+        bad += check("  a save cut inside the object: the old project AND its block are still there, whole (never a new one with an old block)",
                      ok5 && !strcmp(got_name, "T5 SONG") && ((uint32_t *)proj_slot5[2].raw)[0] == PROJ5_MAGIC);
         t5->p[P_LEVEL] = 1; mch_set(4, 4);
         project_load(2);
-        bad += check("  .. and loads with track 5's sound, from the half before", t5->p[P_LEVEL] == 77 && mch_get(4) == 9u);
+        bad += check("  .. and loads with track 5's sound", t5->p[P_LEVEL] == 77 && mch_get(4) == 9u);
         mch_set(4, 4);
         chain_config.count = 0;
+    }
+    {   /* a slot with no FUN11 object yet (Felucca's, 5-LAB 1.0.0's): its FUN10 is read as before; track 5 empty */
+        project_store_t keep;
+        track_t *t5 = &trk[4];
+        proj5_store_t h5;
+        int ok5;
+        t5->p[P_LEVEL] = 31;
+        (void)project_save_as(1, "OLD ONE");
+        keep = proj_slot[1];
+        memset(nor + st_sector(OBJ_PROJ11_0 + 1, 0), 0xFF, 4u * 4096u);                    /* (never written as FUN11) */
+        st_save(OBJ_PROJECT0 + 1, &keep, sizeof keep);                                      /* .. only its FUN10, in the old object */
+        memset(proj_slot[1].raw, 0, 8); memset(&proj_slot5[1], 0, sizeof proj_slot5[1]);
+        proj_fetch(1);
+        t5->p[P_LEVEL] = 1;
+        project_load(1);
+        ok5 = project_used(1) && t5->p[P_LEVEL] == TP[P_LEVEL].def && !memcmp(&proj_slot[1], &keep, sizeof keep);
+        bad += check("a slot with only a FUN10 object (Felucca / 1.0.0): it loads, track 5 empty", ok5);
+        (void)project_save(1);
+        memset(proj_slot[1].raw, 0, 8);
+        st_save(OBJ_PROJECT0 + 1, "OLD AGAIN", 9u);                                         /* (the old object now holds something else) */
+        proj_fetch(1);
+        bad += check("  once a FUN11 object exists the old one is never read again", project_used(1) &&
+                     fl_main(1, &keep) == (int)sizeof keep && !memcmp(&proj_slot[1], &keep, sizeof keep));
+        (void)project_erase(1);
+        memset(proj_slot[1].raw, 0, 8);
+        proj_fetch(1);
+        bad += check("  an erased slot stays empty (the old FUN10 object does not come back)", !project_used(1) &&
+                     st_load2(OBJ_PROJ11_0 + 1, &proj_wire, sizeof proj_wire, &h5, sizeof h5) == 0);
     }
     {   /* 1.5.5 (#199): SAVE > PROJECT ERASE: an empty record committed as a save is (A/B, the record last) */
         project_store_t keep = proj_slot[0];
         int ok2;
         fail_after = 0;                                        /* (the commit record's write fails: a power cut) */
         ok2 = project_erase(0) == 2 && !strcmp(ui.msg, "ERASE ERROR") && !memcmp(&proj_slot[0], &keep, sizeof keep) &&
-              st_load(OBJ_PROJECT0, &got, sizeof got) == (int)sizeof got && !memcmp(&got, &keep, sizeof got);
+              FL_MAIN(0, &got) == (int)sizeof got && !memcmp(&got, &keep, sizeof got);
         fail_after = -1;
         bad += check("failed project erase (cut before its record): ERASE ERROR, the project in RAM and flash", ok2);
         before = erases;
@@ -657,7 +731,7 @@ int main(void)
         proj_cur = 0;
         pat_from[0] = 1; pat_from[1] = 2;
         ok2 = project_erase(0) == 0 && !strcmp(ui.msg, "PROJECT A ERASED") && !project_used(0) && erases == before + 1u &&
-              st_load(OBJ_PROJECT0, &got, sizeof got) == 0 && proj_cur == PROJ_NO_SLOT && !pat_from[0] && pat_from[1] == 2u;
+              fl_empty(0) && proj_cur == PROJ_NO_SLOT && !pat_from[0] && pat_from[1] == 2u;
         proj_fetch(0);
         ok2 &= !project_used(0) && project_used(1);           /* (read back from flash: empty; the next slot kept) */
         bad += check("project erase: the slot empty in RAM and flash (no older copy comes back), the others kept", ok2);
@@ -670,13 +744,13 @@ int main(void)
         proj_slot[0].raw[68 + P_COUNT + 2 + 4] = 7;               /* track 1 step 1: n = 7 */
         bad += check("damaged FUN7 slot (hash ok, n > 4) is refused", (memcpy(proj_slot[0].raw + PROJ_STORE_SIZE - 4,
                       &(uint32_t){proj_hash(proj_slot[0].raw, PROJ_STORE_SIZE - 4)}, 4), !project_used(0)));
-        st_save(OBJ_PROJECT0, &proj_slot[0], sizeof proj_slot[0]);
+        st_save2(OBJ_PROJ11_0, &proj_slot[0], sizeof proj_slot[0], &proj_slot5[0], sizeof proj_slot5[0]);
         ui.msg[0] = 0;
         project_load(0);
         bad += check("loading it says EMPTY SLOT and keeps the steps", !strcmp(ui.msg, "EMPTY SLOT") &&
                       !memcmp(&trk[0].step[0], &keep, sizeof keep));
         proj_slot[0] = old;
-        st_save(OBJ_PROJECT0, &proj_slot[0], sizeof proj_slot[0]);
+        st_save2(OBJ_PROJ11_0, &proj_slot[0], sizeof proj_slot[0], &proj_slot5[0], sizeof proj_slot5[0]);
     }
     {   /* an older format (FUN5) with values FUN7 cannot pack still loads, bounded */
         uint32_t i;

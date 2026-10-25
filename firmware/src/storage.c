@@ -16,6 +16,7 @@
 #define ST_SECTOR 4096u
 #define ST_PAYLOAD_OFF 256u
 #define ST_PAYLOAD_MAX (ST_SECTOR - ST_PAYLOAD_OFF)
+#define ST_BIG_MAX (ST_PAYLOAD_MAX + ST_SECTOR)        /* an object of two sectors a copy: the payload goes on in the second, from its start */
 
 /* flash map (FL_DATA 0x97000..0xDFFFF, FL_GLOB 0xFC000.., FL_AUTO 0xE5000..0xE6FFF, FL_VBANK 0xE7000): settings 0xFC000, projects
  * 0x97000..0x9EFFF, user sample slots 0xA0000..0xC7FFF (eng_sample.c: two since 5-LAB; the third's flash, 0xC8000..0xD1FFF,
@@ -31,8 +32,13 @@
  * kind (type OBJ_FM6VB, not an st_load object); a new bank is first staged in the autosave's older copy (fm6_vbank.c). */
 enum { OBJ_SETTINGS, OBJ_PROJECT0, OBJ_UPRESET0 = OBJ_PROJECT0 + 4, OBJ_FM6BANK = OBJ_UPRESET0 + 2, OBJ_UPFM6,
        OBJ_AUTOSAVE,
-       OBJ_PROJ5_0, OBJ_AUTOSAVE5 = OBJ_PROJ5_0 + 4, OBJ_COUNT };   /* 5-LAB: the fifth track's half of each project and of the
-                                                                    * autosave (project.c PROJ5), 0xC8000.. (was USR3) */
+       OBJ_RETIRED5_0,                               /* 5-LAB 1.0.0's fifth-track objects (10..14): never written again, and
+                                                      * their numbers never reused (a stale record there is no object's) */
+       OBJ_PROJ11_0 = OBJ_RETIRED5_0 + 5, OBJ_AUTOSAVE11 = OBJ_PROJ11_0 + 4, OBJ_COUNT };
+/* 5-LAB 1.0.1, "FUN11": a project is ONE object of two sectors a copy (st_big): the FUN10 record (tracks 1..4, the format
+ * every Felucca reads) then the fifth track's block (project.c PROJ5), committed together. The four slots and the autosave
+ * are OBJ_PROJ11_0.. at 0xC8000..0xDBFFF (the old third user sample slot); OBJ_PROJECT0.. and OBJ_AUTOSAVE (FUN10 alone,
+ * Felucca's and 5-LAB 1.0.0's) are only read, when a slot has no FUN11 object yet. */
 #define OBJ_FM6VB 32u                          /* the voice bank's commit records (fm6_vbank.c; >= OBJ_COUNT: st_load
                                                 * never takes one, no object here takes its sectors) */
 
@@ -72,22 +78,25 @@ static uint32_t st_sector(uint32_t obj, uint32_t copy)  /* flash offset of copy 
         return copy ? 0xFE000u : 0x9F000u;
     if (obj == OBJ_AUTOSAVE)
         return 0xE5000u + copy * ST_SECTOR;
-    if (obj >= OBJ_PROJ5_0)                              /* (5-LAB: USR3's flash, 0xC8000..0xD1FFF: 5 objects, A/B) */
-        return 0xC8000u + (obj - OBJ_PROJ5_0) * 2u * ST_SECTOR + copy * ST_SECTOR;
+    if (obj >= OBJ_PROJ11_0)                             /* (5-LAB: USR3's flash, 0xC8000..0xDBFFF: 5 objects, A/B, two sectors a copy) */
+        return 0xC8000u + (obj - OBJ_PROJ11_0) * 4u * ST_SECTOR + copy * 2u * ST_SECTOR;
     if (obj >= OBJ_UPRESET0)
         return 0xDC000u + (obj - OBJ_UPRESET0) * 2u * ST_SECTOR + copy * ST_SECTOR;
     return 0x97000u + (obj - OBJ_PROJECT0) * 2u * ST_SECTOR + copy * ST_SECTOR;
 }
 
-static uint8_t st_buf[ST_PAYLOAD_MAX] __attribute__((aligned(4), section(".pool")));   /* (main loop only) */
+static uint8_t st_buf[ST_BIG_MAX] __attribute__((aligned(4), section(".pool")));   /* (main loop only) */
+
+static int st_big(uint32_t obj) { return obj >= OBJ_PROJ11_0 && obj < OBJ_COUNT; }   /* two sectors a copy */
+static int st_live(uint32_t obj) { return obj < OBJ_COUNT && (obj < OBJ_RETIRED5_0 || obj >= OBJ_PROJ11_0); }
 
 static int st_head(uint32_t obj, uint32_t copy, st_hdr_t *h)   /* commit record valid: 0 */
 {
-    if (obj >= OBJ_COUNT || copy > 1u)
+    if (!st_live(obj) || copy > 1u)
         return -1;
     if (st_read(st_sector(obj, copy), h, sizeof *h))
         return -1;
-    if (h->magic != ST_MAGIC || h->type != obj || h->slot != copy || h->len > ST_PAYLOAD_MAX ||
+    if (h->magic != ST_MAGIC || h->type != obj || h->slot != copy || h->len > (st_big(obj) ? ST_BIG_MAX : ST_PAYLOAD_MAX) ||
         h->hcrc != st_crc32(h, sizeof *h - 4u))
         return -1;
     return 0;
@@ -95,7 +104,10 @@ static int st_head(uint32_t obj, uint32_t copy, st_hdr_t *h)   /* commit record 
 
 static int st_body(uint32_t obj, uint32_t copy, const st_hdr_t *h)   /* payload -> st_buf, CRC ok: 0 */
 {
-    if (st_read(st_sector(obj, copy) + ST_PAYLOAD_OFF, st_buf, h->len) || st_crc32(st_buf, h->len) != h->crc)
+    uint32_t n1 = h->len > ST_PAYLOAD_MAX ? ST_PAYLOAD_MAX : h->len;
+    if (st_read(st_sector(obj, copy) + ST_PAYLOAD_OFF, st_buf, n1) ||
+        (h->len > n1 && st_read(st_sector(obj, copy) + ST_SECTOR, st_buf + n1, h->len - n1)) ||
+        st_crc32(st_buf, h->len) != h->crc)
         return -1;
     return 0;
 }
@@ -130,48 +142,63 @@ static int st_load(uint32_t obj, void *dst, uint32_t max)
 {
     uint32_t i;
     st_hdr_t h;
-    if (obj >= OBJ_COUNT || st_current(obj, &h) < 0 || h.len > max)
+    if (!st_live(obj) || st_current(obj, &h) < 0 || h.len > max)
         return -1;
     for (i = 0; i < h.len; i++)
         ((uint8_t *)dst)[i] = st_buf[i];
     return (int)h.len;
 }
 
-/* load the copy BEFORE the current one (the older valid one) into dst: its length, or -1 (5-LAB: a project's half whose
- * newer copy names a FUN10 that was never written, project.c proj_half_load) */
-static int st_load_prev(uint32_t obj, void *dst, uint32_t max)
+/* a two-part object (5-LAB FUN11: the FUN10 record, then the fifth track's block) into a (alen bytes) and b (blen): the
+ * object's length (alen + blen); 0 an empty record; -1 no valid copy at all (the caller may look at an older object);
+ * -2 a record of another length (b is not touched then) */
+static int st_load2(uint32_t obj, void *a, uint32_t alen, void *b, uint32_t blen)
 {
     uint32_t i;
     st_hdr_t h;
-    int cur;
-    if (obj >= OBJ_COUNT || (cur = st_current(obj, &h)) < 0 || st_head(obj, (uint32_t)(cur ^ 1), &h) != 0 ||
-        st_body(obj, (uint32_t)(cur ^ 1), &h) != 0 || h.len > max)
+    if (!st_live(obj) || st_current(obj, &h) < 0)
         return -1;
-    for (i = 0; i < h.len; i++)
-        ((uint8_t *)dst)[i] = st_buf[i];
+    if (h.len == 0u)
+        return 0;
+    if (h.len != alen + blen)
+        return -2;
+    for (i = 0; i < alen; i++)
+        ((uint8_t *)a)[i] = st_buf[i];
+    for (i = 0; i < blen; i++)
+        ((uint8_t *)b)[i] = st_buf[alen + i];
     return (int)h.len;
 }
 
-/* save into copy `to` (0 A, 1 B; -1: the one that is not the current copy, as st_save) */
-static int st_save_to(uint32_t obj, const void *src, uint32_t len, int to)
+/* save a (alen bytes) then b (blen; b may be 0) as one record into copy `to` (0 A, 1 B; -1: the one that is not the
+ * current copy, as st_save). A big object (two sectors a copy) erases both, programs the payload (the second sector
+ * from its start), and commits with the record in the FIRST sector last: a cut anywhere before it leaves no valid
+ * header there, so the copy is ignored whole and the other (the previous record) stays in charge */
+static int st_save_parts(uint32_t obj, const void *a, uint32_t alen, const void *b, uint32_t blen, int to)
 {
-    uint32_t seq, base, off;
+    uint32_t seq, base, off, len = alen + blen, n1;
     int cur, rc;
     st_hdr_t h;
-    if (obj >= OBJ_COUNT || len > ST_PAYLOAD_MAX || to > 1)
+    if (!st_live(obj) || len > (st_big(obj) ? ST_BIG_MAX : ST_PAYLOAD_MAX) || to > 1)
         return -1;
     cur = st_current(obj, &h);
     seq = cur < 0 ? 0u : h.seq;
     if (to < 0)
         to = cur == 0 ? 1 : 0;                        /* write the other copy */
     base = st_sector(obj, (uint32_t)to);
-    for (off = 0; off < len; off++)
-        st_buf[off] = ((const uint8_t *)src)[off];    /* the driver wants RAM sources */
+    for (off = 0; off < alen; off++)
+        st_buf[off] = ((const uint8_t *)a)[off];      /* the driver wants RAM sources */
+    for (off = 0; off < blen; off++)
+        st_buf[alen + off] = ((const uint8_t *)b)[off];
     if ((rc = st_erase(base)) != 0)
         return rc;
+    if (len > ST_PAYLOAD_MAX && (rc = st_erase(base + ST_SECTOR)) != 0)     /* (the second sector only when the record goes into it:
+                                                                            * an empty record is one erase) */
+        return rc;
+    n1 = len > ST_PAYLOAD_MAX ? ST_PAYLOAD_MAX : len;
     for (off = 0; off < len; off += 256u) {
         uint32_t n = len - off > 256u ? 256u : len - off;
-        if ((rc = st_prog(base + ST_PAYLOAD_OFF + off, st_buf + off, n)) != 0)
+        uint32_t at = off < n1 ? base + ST_PAYLOAD_OFF + off : base + ST_SECTOR + (off - n1);
+        if ((rc = st_prog(at, st_buf + off, n)) != 0)
             return rc;
     }
     h.magic = ST_MAGIC;
@@ -191,6 +218,11 @@ static int st_save_to(uint32_t obj, const void *src, uint32_t len, int to)
             return -7;
     }
     return 0;
+}
+static int st_save_to(uint32_t obj, const void *src, uint32_t len, int to) { return st_save_parts(obj, src, len, 0, 0, to); }
+static int st_save2(uint32_t obj, const void *a, uint32_t alen, const void *b, uint32_t blen)
+{
+    return st_save_parts(obj, a, alen, b, blen, -1);
 }
 
 static int st_save(uint32_t obj, const void *src, uint32_t len) { return st_save_to(obj, src, len, -1); }

@@ -1,11 +1,25 @@
 # 5-LAB: changes from Felucca 1.6.1
 
 5-LAB is a fork of [Felucca](https://github.com/hugelton/Felucca) 1.6.1 by Leo Kuroshita (Hügelton Instruments), GPL-3.0-only like the
-original. **Version 1.0.0** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
+original. **Version 1.0.1** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
 Five audio tracks, every engine on all five; the lab is for trying things out.
 
 Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything not listed here is Felucca 1.6.1 as it was
 (the sound is the same: the 98 golden renders of `tests/golden.txt` are unchanged).
+
+## 1.0.1: FUN11, a project and its fifth track in ONE flash object
+
+- **Why.** In 1.0.0 track 5 lived in a second flash object beside the FUN10 project, so a power cut between the two writes could leave a
+  project with the wrong (or no) track 5. Now they are one object, committed together: after any cut the whole previous project is there, or the whole new one.
+- **How.** A project is an object of two flash sectors a copy (A/B as before): the FUN10 record (tracks 1..4, 3840 bytes), then the fifth track's block
+  (1280 bytes, "FT5A"), 5120 bytes in all; the record in the first sector is written last, over a CRC of both. The four slots and the autosave are in
+  the flash of the old third sample slot (0xC8000..0xDBFFF, 20 sectors); the object can grow to 7936 bytes, room for more tracks or data
+  without another format. (`storage.c` `st_save2` / `st_load2`, `project.c` `proj_flash_pair*`; `tests/storage_test.c` cuts a save at every byte.)
+- **Your projects.** A slot with no FUN11 object yet (Felucca's, or 5-LAB 1.0.0's) loads its FUN10 as before, track 5 empty; it becomes FUN11 at its next
+  save. 1.0.0's separate track-5 objects are not read: **track 5 of a project saved by 1.0.0 is lost at the update** (the other four tracks, the name and the
+  globals load). The first FUN11 save of a slot ends the old object's say for it, and an erased slot stays empty. The autosave behaves the same.
+- **Going back.** A project saved by 1.0.1 is not read by 1.0.0 or Felucca (a newer record): use MENU/editor backups before going back.
+- The editor's backup archive is unchanged (ids 0..14, 32, 33); restoring ids 2..5 then 11..14 writes the project, then the project with its block.
 
 ## 1.0.0: five tracks (the project is now called 5-LAB)
 
