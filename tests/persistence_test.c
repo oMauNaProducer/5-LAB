@@ -30,6 +30,7 @@ static void panel_setup(void) {}
 
 static uint8_t nor[0x100000], flash_ok = 1;
 static int erase_error, fail_after = -1;
+static char got_name[16];
 static uint32_t erases, as_erases;               /* (as_erases: the autosave's two sectors, 0xE5000 / 0xE6000) */
 static int st_read(uint32_t off, void *dst, uint32_t n) { memcpy(dst, nor + off, n); return 0; }
 static int st_erase(uint32_t off)
@@ -250,7 +251,7 @@ static void as_power_on(void)                            /* RAM lost: the defaul
 static void as_edit(uint32_t i)                          /* a change a project holds: step i's note (always another) */
 {
     static uint32_t n;
-    track_t *t = &trk[i % NTRK];
+    track_t *t = &trk[i % NTRK_DISK];   /* (the edits the tests make are on tracks 1..4) */
     step_t *s = &t->step[i % 16u];
     s->time = ST_NOTE;
     s->n = 1;
@@ -592,6 +593,51 @@ int main(void)
                       !strcmp(ui.msg, "RENAMED") && (memset(proj_slot[0].raw, 0, 8), proj_fetch(0), project_name(0, n)) &&
                       !strcmp(n, "DUB") && proj_scratch.t[0].step[0].note[0] == st0.note[0]);
     }
+    {   /* 5-LAB: the fifth track's half is its own flash object, linked to the FUN10 */
+        project_store_t keep4;
+        track_t *t5 = &trk[4];
+        int ok5;
+        t5->p[P_LEVEL] = 77; t5->p[P_PAN] = -11;
+        t5->step[6].time = ST_NOTE; t5->step[6].n = 1; t5->step[6].note[0] = 61; t5->step[6].vel = 90;
+        mch_set(4, 9);
+        chain_config.count = 1; chain_config.row[0] = chain_row_of(0, 1); chain_config.row[0].slot[4] = 2;
+        (void)project_save(2);
+        ok5 = !project_save_as(2, "T5 SONG") && st_load(OBJ_PROJ5_0 + 2, &proj_wire5, sizeof proj_wire5) == (int)PROJ5_SIZE;
+        bad += check("a save writes the fifth track's half beside the project (its own object)", ok5);
+        t5->p[P_LEVEL] = 1; t5->step[6].time = ST_REST; mch_set(4, 4); chain_config.row[0].slot[4] = CHAIN_SILENT;
+        memset(proj_slot[2].raw, 0, 8); memset(&proj_slot5[2], 0, sizeof proj_slot5[2]);       /* (RAM lost: back from flash) */
+        proj_fetch(2);
+        project_load(2);
+        bad += check("  lost from RAM, read back from flash: track 5's sound, steps, MIDI channel and section lane",
+                     t5->p[P_LEVEL] == 77 && t5->p[P_PAN] == -11 && t5->step[6].time == ST_NOTE && t5->step[6].note[0] == 61 &&
+                     mch_get(4) == 9u && chain_config.row[0].slot[4] == 2u);
+        keep4 = proj_slot[2];
+        st_save(OBJ_PROJ5_0 + 2, "NOT A HALF", 10u);                                          /* records that are no half (both copies) */
+        st_save(OBJ_PROJ5_0 + 2, "NOT A HALF", 10u);
+        memset(proj_slot[2].raw, 0, 8); memset(&proj_slot5[2], 0, sizeof proj_slot5[2]);
+        proj_fetch(2);
+        t5->p[P_LEVEL] = 1;
+        project_load(2);
+        bad += check("  a flash half that is no half: the project loads, track 5 at its power-on sound",
+                     project_used(2) && t5->preset == TRK_DEF[4][1] && t5->engine == TRK_DEF[4][0] && t5->step[6].time == ST_REST &&
+                     !memcmp(&proj_slot[2], &keep4, sizeof keep4));
+        t5->p[P_LEVEL] = 77; mch_set(4, 9);
+        (void)project_save(2);                                                               /* (a good half again) */
+        fail_after = 6;                                                                      /* the half passes (5 programs + record), the FUN10 fails */
+        before = erases;
+        ok5 = project_save_as(2, "NEW NAME") == 2 && !strcmp(ui.msg, "SAVE ERROR");
+        fail_after = -1;
+        memset(proj_slot[2].raw, 0, 8); memset(&proj_slot5[2], 0, sizeof proj_slot5[2]);
+        proj_fetch(2);
+        project_name(2, got_name);
+        bad += check("  a save whose FUN10 fails: the old project and its own half still there (the half before is taken)",
+                     ok5 && !strcmp(got_name, "T5 SONG") && ((uint32_t *)proj_slot5[2].raw)[0] == PROJ5_MAGIC);
+        t5->p[P_LEVEL] = 1; mch_set(4, 4);
+        project_load(2);
+        bad += check("  .. and loads with track 5's sound, from the half before", t5->p[P_LEVEL] == 77 && mch_get(4) == 9u);
+        mch_set(4, 4);
+        chain_config.count = 0;
+    }
     {   /* 1.5.5 (#199): SAVE > PROJECT ERASE: an empty record committed as a save is (A/B, the record last) */
         project_store_t keep = proj_slot[0];
         int ok2;
@@ -639,7 +685,7 @@ int main(void)
         v5.size = sizeof v5;
         for (i = 0; i < G_COUNT; i++)
             v5.g[i] = GP[i].def;
-        for (i = 0; i < NTRK; i++) {
+        for (i = 0; i < NTRK_DISK; i++) {
             v5.t[i].engine = trk[i].engine;
             memcpy(v5.t[i].p, trk[i].p, sizeof v5.t[i].p);
         }

@@ -40,6 +40,7 @@ static const uint8_t ED_MENU[][2] = {
     {MI_CPU2, 32},                                     /* 1.6.1, the second core (Discussion #141): 2ND CORE OFF / ON (BETA),
                                                         * SYSTEM, from the next power-on (a FELUCCA_CPU2=0 build: 0..31) */
 #endif
+    {MI_TCH5, FELUCCA_CPU2 ? 33 : 32},                 /* 5-LAB: T5 CHANNEL, MIDI (appended last: every index and id before it keeps its own) */
 };
 #define ED_MENU_N NELEM(ED_MENU)
 

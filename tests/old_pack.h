@@ -21,8 +21,8 @@ static uint32_t old_pack(uint8_t *b, const project_t *q, uint32_t magic, uint32_
     memcpy(b, &magic, 4);
     memcpy(b + 4, &st, 4);
     memcpy(b + 8, q->g, sizeof q->g);
-    b[62] = q->sel; b[63] = q->parts; b[64] = q->phys; b[66] = (uint8_t)np;
-    for (t = 0; t < NTRK; t++) {
+    b[62] = q->sel < NTRK_DISK ? q->sel : 0; b[63] = q->parts; b[64] = q->phys; b[66] = (uint8_t)np;
+    for (t = 0; t < NTRK_DISK; t++) {
         for (i = 0; i < np; i++) {
             uint32_t id = i < np - 8u ? i : P_E0 + i - (np - 8u);
             b[pos++] = (uint8_t)(q->t[t].p[id] + 64);
@@ -48,7 +48,7 @@ static uint32_t old_pack(uint8_t *b, const project_t *q, uint32_t magic, uint32_
         for (i = 0; i < CHAIN_ROWS; i++) {
             const chain_row_t *r = &q->chain.row[i];
             if (i < q->chain.count && (r->slot[0] > 3u || r->slot[1] != r->slot[0] || r->slot[2] != r->slot[0] ||
-                                       r->slot[3] != r->slot[0]))
+                                       r->slot[3] != r->slot[0]))   /* (track 5 is not stored then) */
                 return 0;
             c9.row[i].slot = r->slot[0] & 3u;
             c9.row[i].repeat = r->repeat;
@@ -64,15 +64,15 @@ static uint32_t old_pack(uint8_t *b, const project_t *q, uint32_t magic, uint32_
         int16_t v = e->value;
         if (id >= P_E0)
             id -= P_COUNT - np;
-        b[pos + 4u + 4u * i] = e->place;
+        b[pos + 4u + 4u * i] = (uint8_t)e->place;
         b[pos + 5u + 4u * i] = (uint8_t)(id | (e->param & MOTION_LOCK));
         memcpy(b + pos + 6u + 4u * i, &v, 2);
     }
     pos += 260u;
     if (magic != OLD_FUN7) {
-        if (pos > name - NTRK * FM6_PACKED)
+        if (pos > name - NTRK_DISK * FM6_PACKED)
             return 0;
-        memcpy(b + name - NTRK * FM6_PACKED, q->fm6, NTRK * FM6_PACKED);
+        memcpy(b + name - NTRK_DISK * FM6_PACKED, q->fm6, NTRK_DISK * FM6_PACKED);
     } else if (pos > name) {
         return 0;
     }

@@ -158,7 +158,7 @@ static int select_page(void)
     turn(EN_SELECT, 1);
     ok = title_is("ENV DEST");
     turn(EN_SELECT, 1);
-    ok &= title_is("ENV DEST");                         /* (LAB-4T: the last page of the family: it stays, no round) */
+    ok &= title_is("ENV DEST");                         /* (5-LAB: the last page of the family: it stays, no round) */
     turn(EN_SELECT, -1);
     ok &= title_is("ENV");
     turn(EN_SELECT, -1);
@@ -462,7 +462,7 @@ static int clean_init(void)
 }
 
 /* OCT- (on the press again in 1.5.6) next to 1.5.5's other OCT- / layer users: SEQ TOOLS' EUCLID (OCT- cancels, OCT+
- * applies, its knobs HITS STEPS ROT even with OCT- held) and FILL (GLO + E4) leave the octave alone; a plain OCT- after
+ * applies, its knobs HITS STEPS ROT even with OCT- held) and FILL (GLO + F5) leave the octave alone; a plain OCT- after
  * them still lowers it. (MIDI LEARN's OCT- clear: tests/midi_control_test.c checks the octave stays) */
 static int oct_layers(void)
 {
@@ -489,16 +489,16 @@ static int oct_layers(void)
     bad += check("OCT- and EUCLID (#186): OCT- cancels, OCT+ applies, OCT- + KNOB 1 is HITS; no octave", ok);
 
     btn_down(B_GLO); frames(100);
-    key_down(key_at(0, 6)); frames(50);                /* E4: FILL while held */
+    key_down(key_at(0, 14)); frames(50);                /* F5: FILL while held */
     ok = seq_fill == 1u && ui.layer == LAYER_GLO;
-    key_up(key_at(0, 6)); frames(50);
+    key_up(key_at(0, 14)); frames(50);
     ok &= !seq_fill;
     btn_up(B_GLO); frames(400);
     ok &= song.octave == 0;
     press(B_OCTDN);
     ok &= song.octave == -1;
     song.octave = 0;
-    bad += check("  FILL (GLO + E4) as before, the octave untouched; a plain OCT- after it the octave down", ok);
+    bad += check("  FILL (GLO + F5) as before, the octave untouched; a plain OCT- after it the octave down", ok);
     return bad;
 }
 

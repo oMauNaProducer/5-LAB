@@ -69,7 +69,7 @@ static void perf_reset(void)
     memset(&pf, 0, sizeof pf);
     pf.src = pf.next = PF_N;
     pf.lc = PF_TOP;
-    pf.mg[0] = pf.mg[1] = pf.mg[2] = pf.mg[3] = 32768;
+    pf.mg[0] = pf.mg[1] = pf.mg[2] = pf.mg[3] = pf.mg[4] = 32768;
     perf_held = perf_act = 0;
     perf_latched = 0;
     perf_kill = 0;
@@ -424,8 +424,8 @@ static int test_keys(void)
             ok &= !kb_layer && !perf_held && mo_w == mo0;
         }
         fm1_in.buttons = 0;
-        bad += check("the keys without an effect (F5 G5, 8 black from D#4): silent, nothing held",
-                     ok && assigned == 0xAD5BFFu);  /* F3 .. C5 but D#4 F#4 G#4 A#4, D5, E5 (1.5.1's throws) */
+        bad += check("the keys without an effect (F5 G5, 7 black from D#4): silent, nothing held",
+                     ok && assigned == 0xAD5FFFu);  /* F3 .. C5 and the five black mutes D#4 .. A#4 + F#4 (5-LAB: five tracks), D5, E5 (1.5.1 throws) */
         kb_mask = perf_mask = 0;
     }
     usb.config = 0;
@@ -588,7 +588,7 @@ static int test_misc(void)
         snprintf(what, sizeof what, "black key 1: track 1 muted while held (peak %d -> %d), P_MUTE untouched", before, during);
         bad += check(what, before > 1000 && during < 200 && !trk[0].p[P_MUTE]);
     }
-    {   /* LAB-4T: a track muted in GLO (P_MUTE): its black key releases it when LET GO (held, it stays muted); the next hold mutes it while held */
+    {   /* 5-LAB: a track muted in GLO (P_MUTE): its black key releases it when LET GO (held, it stays muted); the next hold mutes it while held */
         int32_t o[2 * CTL];
         uint32_t f;
         int32_t before = 0, down = 0, freed = 0, held = 0, after = 0;

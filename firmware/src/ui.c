@@ -102,13 +102,12 @@ static uint32_t sel_mode(void) { return ((ui_prefs2 >> 4) & 1u) | ((ui_prefs2 >>
  * this byte no engine uses holds the level: 1 LO, 2 HI; 0 (every older setting) or another value = INV as before.
  * Saved with the settings; read only while LEDS is INV (menu_items.c leds_row) */
 #define ui_leds_inv (favorites.factory[15][25])
-/* LAB-4T v0.6: the CLK the FM-1 follows (bits 1-2: 0 INT, 1 USB, 2 TRS), kept past a power-off (ui_input.c). A byte of its
+/* 5-LAB v0.6: the CLK the FM-1 follows (bits 1-2: 0 INT, 1 USB, 2 TRS), kept past a power-off (ui_input.c). A byte of its
  * own that no engine uses, saved with the settings (settings_persist.c: another value reads as INT). Bit 0 is not used */
 #define ui_clkout (favorites.factory[15][13])
 static uint32_t leds_inv(void) { return settings_leds == LEDS_INV && ui_leds_inv - 1u < 2u ? ui_leds_inv : 0u; }
-enum { HV_SCOPE, HV_TRACKS, HV_LEVELS, HV_COUNT };
-static int home_tracks(void) { return ui_home_view == HV_TRACKS || ui_home_view == HV_LEVELS; }
-static int home_levels(void) { return ui_home_view == HV_LEVELS; }
+enum { HV_SCOPE, HV_TRACKS, HV_COUNT };            /* (5-LAB: LEVELS retired, a saved 2 reads as SCOPE; the levels are the MIXER's) */
+static int home_tracks(void) { return ui_home_view == HV_TRACKS; }
 enum { RP_CLICK, RP_LEVEL, RP_COUNTIN };
 static uint32_t rp_get(uint32_t f)                     /* a field as the MENU steps it: 0..2 */
 {
@@ -815,7 +814,7 @@ static void home_tap(void)
 
 /* MENU > CONTROL > SELECT PAGE (1.5.5, Discussion #188): the SELECT knob steps the pages of the family shown, a detent
  * each: right as a tap of the family's button does, left back (the pages that show for the track's engine);
- * LAB-4T: it stops at the family's first and last page (the family's button and HOME's taps still go round);
+ * 5-LAB: it stops at the family's first and last page (the family's button and HOME's taps still go round);
  * HOME, MIXER and CLOCK are one run, in that order. A family of one page (GLO's SONG) stays */
 static void page_turn(int32_t dir)
 {
@@ -831,7 +830,7 @@ static void page_turn(int32_t dir)
         }
     if (m < 2u)
         return;
-    if (dir > 0 ? at + 1u >= m : !at)                   /* LAB-4T: no round: the first page of the family stops a turn back, the last one
+    if (dir > 0 ? at + 1u >= m : !at)                   /* 5-LAB: no round: the first page of the family stops a turn back, the last one
                                                          * a turn forward */
         return;
     i = ring[dir > 0 ? at + 1u : at - 1u];
@@ -1735,12 +1734,11 @@ static uint32_t preset_visible(uint32_t cur, uint32_t total, uint32_t row)
     return first + row < total ? first + row : total;
 }
 
-/* HOME: the track KNOB k edits (MENU > HOME LEVELS, 1.5: track k; else the selected one) and what: the engine's four
- * main parameters, or (LEVELS) the track's LEVEL, as the GLO layer's knobs */
-static track_t *home_trk(uint32_t k) { return home_levels() ? &trk[k & 3u] : TSEL; }
+/* HOME: what KNOB k edits: the selected track's engine's four main parameters */
+static track_t *home_trk(uint32_t k) { (void)k; return TSEL; }
 static const param_desc_t *home_param(uint32_t k, int16_t **vp)
 {
-    uint32_t id = home_levels() ? (uint32_t)P_LEVEL : ENGINES[TSEL->eng_req % NENGINES]->knob[k & 3u];
+    uint32_t id = ENGINES[TSEL->eng_req % NENGINES]->knob[k & 3u];
     *vp = &home_trk(k)->p[id];
     return track_desc(home_trk(k), id);
 }

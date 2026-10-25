@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
-# LAB-4T: the host tests that need only a C compiler and build/gen (run ./build.sh once first, or the generator it calls).
+# 5-LAB: the host tests that need only a C compiler and build/gen (run ./build.sh once first, or the generator it calls).
 # A short list for CI (.github/workflows/build.yml); tests/run_tests.sh is the full suite. Exit 1 if any fails.
 #   sh tests/ci_quick.sh
 cd "$(dirname "$0")/.." || exit 1
@@ -15,7 +15,7 @@ t() {   # name [extra compiler flags]
     else echo "FAIL  $n"; grep FAIL "$O/$n.out" | head -3; tail -n 12 "$O/$n.out" | cut -c1-200; fail=1; fi
 }
 for n in click_test editor_test midi_control_test motion_test ratchet_test step15_test detail_test \
-         seq155_test ui155_test v156_test v16_test swing_test project_test persistence_test settings_test backup_test \
+         seq155_test ui155_test v156_test v16_test swing_test project_test proj5_test persistence_test settings_test backup_test \
          robust_test midi_uart_test ui_test; do
     t "$n"
 done

@@ -378,16 +378,16 @@ static int route_track_test(void)
         for (ch = 0; ch < 16u; ch++) {
             queued(0x90 | ch, 40u + ch, 100, 1);
             for (i = 0; i < NTRK; i++)
-                ok &= gate_note(&trk[i], 40u + ch) == (ch < 4u && i == ch);
-            ok &= midi_slot(ch) == (ch < 4u ? (int32_t)ch : -1);
+                ok &= gate_note(&trk[i], 40u + ch) == (ch < (r ? 5u : 4u) && i == ch);   /* (TRACK: track 5 on channel 5) */
+            ok &= midi_slot(ch) == (ch < (r ? 5u : 4u) ? (int32_t)ch : -1);
         }
-        bad += check(r ? "TRACK, the default channels: channels 1..4 play tracks 1..4, 5..16 nothing (as CH1-4)" :
+        bad += check(r ? "TRACK, the default channels: channels 1..5 play tracks 1..5, 6..16 nothing (CH1-4 plus track 5)" :
                          "CH1-4 (for the comparison): channels 1..4 play tracks 1..4, 5..16 nothing", ok);
     }
     /* drums on 10, bass on 2, OMNI, OFF */
     midi_test_reset(); song.sel = 3; song.g[G_ROUTE] = ROUTE_TRACK; trk[0].p[P_VOICE] = trk[2].p[P_VOICE] = V_POLY;
     events_block(CTL);
-    tch(0, 9); tch(1, 1); tch(2, MCH_OMNI); tch(3, MCH_OFF);
+    tch(0, 9); tch(1, 1); tch(2, MCH_OMNI); tch(3, MCH_OFF); mch_set(4, MCH_OFF); events_block(CTL);   /* (T5 CHANNEL: no menu row yet) */
     ok = mch_get(0) == 9u && mch_get(1) == 1u && mch_get(2) == MCH_OMNI && mch_get(3) == MCH_OFF &&
          song.mch[0] == 9u && song.mch[1] == 0u && song.mch[2] == MCH_OMNI;
     ok &= midi_slot(9) == 0 && midi_slot(1) == 1 && midi_slot(0) == 2 && midi_slot(4) == 2 && midi_slot(15) == 2;
@@ -653,7 +653,7 @@ static int cc_map_test(void)
     bad += check("not armed: the CC is the new value, no event", trk[0].p[P_E4] == 77 && motion.count == 1u);
     return bad;
 }
-/* 1.5 (Discussion #170): MIDI LEARN. GLO + D4 on, a knob picks, a CC is learned; the map in favorites.factory[14] */
+/* 1.5 (Discussion #170): MIDI LEARN. GLO + E5 on, a knob picks, a CC is learned; the map in favorites.factory[14] */
 static int ml_entry(uint32_t cc, uint32_t k, uint32_t id) { return ml_cc_of(k, id) == cc + 1u; }
 static int learn_test(void)
 {
@@ -667,12 +667,12 @@ static int learn_test(void)
     queued(0xB0, 20, 99, 1);
     bad += check("  an unlearned CC changes nothing (as before)", !memcmp(before, trk[0].p, sizeof before));
 
-    /* on: GLO + D4 */
-    lay_combo(B_GLO, white(5)); key_up(white(5)); frame();
+    /* on: GLO + E5 */
+    lay_combo(B_GLO, white(13)); key_up(white(13)); frame();
     ok = ui.ml.on && msg_is("MIDI LEARN ON") && ui.layer == LAYER_GLO;
-    ok &= ((leds_at(0) | leds_at(250)) >> white(5)) & 1u;          /* (lit: on) */
+    ok &= ((leds_at(0) | leds_at(250)) >> white(13)) & 1u;          /* (lit: on) */
     btn_up(B_GLO); frame();
-    bad += check("GLO + D4: MIDI LEARN on (the D4 cell / LED lit), the map closes with GLO", ok && ui.ml.on && !ui.layer);
+    bad += check("GLO + E5: MIDI LEARN on (the E5 cell / LED lit), the map closes with GLO", ok && ui.ml.on && !ui.layer);
     queued(0xB0, 20, 99, 1); frame();
     bad += check("  no parameter picked yet: a CC learns nothing, sets nothing", !ml_count() &&
                  !memcmp(before, trk[0].p, sizeof before));
@@ -766,9 +766,9 @@ static int learn_test(void)
     ok &= song.octave == 1;
     song.octave = 0;
     bad += check("OCT+: LEARN DONE (the map stays, OCT± shift the octave again)", ok);
-    lay_combo(B_GLO, white(5)); key_up(white(5)); btn_up(B_GLO); frame();
-    lay_combo(B_GLO, white(5)); key_up(white(5)); btn_up(B_GLO); frame();
-    bad += check("GLO + D4 twice: on, then LEARN DONE", !ui.ml.on && msg_is("LEARN DONE"));
+    lay_combo(B_GLO, white(13)); key_up(white(13)); btn_up(B_GLO); frame();
+    lay_combo(B_GLO, white(13)); key_up(white(13)); btn_up(B_GLO); frame();
+    bad += check("GLO + E5 twice: on, then LEARN DONE", !ui.ml.on && msg_is("LEARN DONE"));
 
     /* MENU > MIDI > LEARN CLEAR (1.5): OCT+ clears every learned CC */
     hold(B_HOME);

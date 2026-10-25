@@ -3,7 +3,7 @@
 /* SLICE: a sample slicer, played from the keys and the sequencer. Felucca's own design.
  *
  * Material (SRC): the built-in BREAK (tools/gen_samples.py: one bar of 16ths at 120 BPM arranged
- * from Felucca's generated drums, stored after the SAMPLE sets), a user slot USR1..3 (the same
+ * from Felucca's generated drums, stored after the SAMPLE sets), a user slot USR1..2 (the same
  * slots as SAMPLE's, eng_sample.c), whose zones are played one after the other as one recording
  * (a zone that shares its data with an earlier one is skipped), or PIANO (SRC 4, since 1.0.4: one
  * note, the SAMPLE engine's PIANO zone of middle C, played from its data in SMP_DATA: no copy).
@@ -64,9 +64,9 @@ static slc_src_t slc_usr[SMP_USER_SLOTS];
 typedef int16_t slc_rbuf_t[NVOICE][SLC_RB];           /* reverse windows, one per part voice (the part's eng_mem) */
 ENG_MEM_FITS("SLICE", sizeof(slc_rbuf_t));
 /* append-only: stored sounds keep their SRC numbers (1.0.4 added PIANO) */
-static const char *const N_SLC_SRC[] = {"BREAK", "USR1", "USR2", "USR3", "PIANO"};
-#define SLC_SRC_PIANO 4u
-#define SLC_NSRC 5
+static const char *const N_SLC_SRC[] = {"BREAK", "USR1", "USR2", "PIANO"};
+#define SLC_SRC_PIANO 3u            /* (5-LAB: USR3 retired, PIANO was 4: slc_src_of clamps an old 4 to it) */
+#define SLC_NSRC 4
 #define SLC_SINE 7u                  /* a voice's source when it has no material: the sine */
 static const char *const N_SLC_DIV[] = {"4", "8", "16", "32", "AUTO", "MAN"};
 static const char *const N_SLC_MODE[] = {"ONE", "GATE", "LOOP"};
@@ -91,7 +91,7 @@ static uint8_t slc_man_save;                     /* bit k: slot k's slices chang
 
 /* the SRC of a part's sound (0..4: a stored value out of range reads as the nearest) */
 static uint32_t slc_src_of(const int16_t *p) { return (uint32_t)clamp(p[P_E0], 0, SLC_NSRC - 1); }
-/* source 0 = BREAK, 1..3 = USR1..3, 4 = PIANO; 0 = no material (an empty or erased slot, no PIANO in the build) */
+/* source 0 = BREAK, 1..2 = USR1..2, 3 = PIANO; 0 = no material (an empty or erased slot, no PIANO in the build) */
 static const slc_src_t *slc_get(uint32_t src)
 {
     if (!src)

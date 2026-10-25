@@ -1,11 +1,39 @@
-# LAB-4T: changes from Felucca 1.6.1
+# 5-LAB: changes from Felucca 1.6.1
 
-LAB-4T is a fork of [Felucca](https://github.com/hugelton/Felucca) 1.6.1 by Leo Kuroshita (Hügelton Instruments), GPL-3.0-only like the
-original. **Version 0.9.8** (the first LAB-4T was 0.6) is the fork's own numbering: it starts again from 0.x so it is never mistaken for an official Felucca release.
-Four audio tracks (the "4T"), as in Felucca; the lab is for trying things out.
+5-LAB is a fork of [Felucca](https://github.com/hugelton/Felucca) 1.6.1 by Leo Kuroshita (Hügelton Instruments), GPL-3.0-only like the
+original. **Version 1.0.0** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
+Five audio tracks, every engine on all five; the lab is for trying things out.
 
 Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything not listed here is Felucca 1.6.1 as it was
 (the sound is the same: the 98 golden renders of `tests/golden.txt` are unchanged).
+
+## 1.0.0: five tracks (the project is now called 5-LAB)
+
+**Five tracks, every engine on all five**
+- Felucca has four tracks; 5-LAB has five (`NTRK` 5), and any of the 13 engines can be on any of them. The 8 voices stay shared.
+- **Projects keep their format.** FUN10 still stores four tracks, so a 5-LAB project opens in Felucca 1.6.1 (without track 5) and every older project
+  loads here with track 5 empty. Track 5 lives in a linked 1280-byte object ("FT5A", tied to the project by its hash) in the flash that USR3 used. The
+  autosave has its own companion. (`project.c` PROJ5, `storage.c`; `tests/proj5_test.c`, `tests/persistence_test.c`.)
+- **USR3 is gone.** Its flash holds track 5's companion objects, so there are two user sample slots (USR1, USR2). SAMPLE / GRAIN / SLICE lists lose USR3
+  (SLICE's PIANO is source 3; an old 4 is clamped to it). A backup made before keeps its USR3 in the file, and a restore skips it and says so.
+- The song chain has five slots per row, the MOTION places cover five tracks, MIDI IN TRACK has a fifth channel.
+
+**Controls**
+- **GLO layer:** black keys mute T1..T5 (D#4 for T5), the white keys at C4 and up solo them, SOLO 5 on C4. The four functions move to the last four white
+  keys from D5: **D5 UNMUTE ALL, E5 MIDI LEARN, F5 FILL, G5 TAP**. In the FX layer the fifth black key mutes track 5 as the others.
+- **HOME > LEVELS is removed.** The level of every track, T5 included, is edited in the MIXER, selecting each track.
+- **MENU > MIDI > T5 CHANNEL** (a row moved out of the MIDI tab makes room); SCREEN WAKE moved to SYSTEM.
+
+**Screens redrawn for five columns**
+- MIXER (46 px columns; REC / ARM and the MUTE badge fit beside the name; PAN shown as -64..+63), HOME TRACKS, SONG lanes, the GLO and FX key maps.
+
+**Web editor, backup and protocol**
+- The editor shows five tracks and two sample slots; SONG lanes are 5 wide. Backups use ids 0..9, 10 (T5 half of the live music), 11..14 (halves of
+  slots A..D), 32, 33 (17 objects); older archives (13 / 12 / 11 objects) still read. `EDITOR_PROTOCOL.md` has the details.
+
+**Reading notes**
+- The 98 golden renders are unchanged (the sound is the same). Sources of the listed numbers: `tests/` (ui_test, editor_test, proj5_test, storage_test,
+  persistence_test, perform_test, slice_test, sample_test and the web tests).
 
 ## 0.9.8 (and the 0.6 before it)
 
@@ -39,7 +67,7 @@ Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything n
 - Licence texts as Leo updated them: the Hügelton Sample Pack and `tools/gen_waves.py` are CC0 1.0 (`LICENSING.md`, `CREDITS.md`, the ABOUT credits, the installer footer).
 
 **Fork**
-- Version `v0.9.8` (the editor reports `FELUCCA v0.9.8 LAB-4T`; the "FELUCCA " prefix is what the web editor and installer look for), splash and ABOUT say LAB-4T and credit Hügelton Instruments.
+- Version `v0.9.8` (the editor reports `FELUCCA v0.9.8 5-LAB`; the "FELUCCA " prefix is what the web editor and installer look for), splash and ABOUT say 5-LAB and credit Hügelton Instruments.
 - `.github/workflows/build.yml`: builds the package, the browser emulator ("Try"), the web editor and installer, runs `tests/ci_quick.sh`, and
   publishes to GitHub Pages (a public repository).
 - New tests: the CLK checks in `tests/ui_test.c`; `tests/ci_quick.sh`.

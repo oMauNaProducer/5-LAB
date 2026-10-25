@@ -7,6 +7,27 @@ flash writes and live pushes (16-26, 32) have host coverage; that does not estab
 their hardware behavior. The step chance byte, motion (64) and the full backup (65-67) have host
 coverage only (`tests/editor_test.c`, `tests/backup_test.c`, `web/test_backup.mjs`).
 
+**5-LAB: five tracks (the fork's 0.9.9).** The device has `NTRK` = 5 tracks, all engines on all five. Nothing is renumbered:
+`INFO` says `NTRK` 5 and `TRACK`, `TRACK_MIX`, `TRACK_DUMP`, `TRACK_STEP`, `TRACK_PARAM` and `MOTION` take track 0..4 (a track
+≥ NTRK still gets no reply); `TRACK` lists five parts. An editor must read the count from `INFO` / `TRACK` and not assume
+four (this one does). The fifth track's power-on sound is the one of a track 5 with no project: engine ANALOG, preset 0.
+Changes of this fork against 1.6.1, all of them visible on the wire:
+- the user sample slots are **two** (USR1, USR2): `SMP_INFO` lists 2 slots, `SMP_BEGIN` / `SMP_WRITE` / `SMP_END` / `SMP_ERASE`
+  refuse a slot ≥ 2, SAMPLE's SET and GRAIN's SRC have 7 names (…, USR1, USR2) and SLICE's SRC 4 (BREAK, USR1, USR2, PIANO;
+  a stored 4, the old PIANO, plays PIANO). The third slot's flash holds the fifth track's data.
+- `SONG` sections (ops 4..7) have a slot **per track, five** (`57 01 5`): a row is `slot T1..T5, repeat` (6 bytes), a set has
+  `2 + count × 6` argument bytes; a project of four tracks has its lane 5 on "-". Ops 0..3 are as before (a row puts all five tracks on its slot).
+- `HOME` (MENU id 23) has two values (SCOPE, TRACKS): LEVELS is retired (a stored 2 reads as SCOPE); T5's level is the MIXER's.
+- MENU gets **T5 CHANNEL** as the last item (index and id 32 without the 2ND CORE row, 33 with it; the MIDI tab); SCREEN WAKE
+  (id 31) moves to the SYSTEM tab (its id and index do not change, only the tab it reports).
+- full backup: ids **10..14** are the fifth track's half of the music (10, with id 0) and of the slots A..D (11..14, with ids
+  2..5); 1280 bytes or 0 (none); a half names the project it belongs to, so restore ids 11..14 after their ids 2..5 and id 10
+  right after id 0. The sample slots are ids 32 and 33 (id 34 is gone). The list has 17 objects.
+- projects: FUN10 keeps its 4-track layout; the fifth track lives in a linked 1280-byte companion in flash (FT5A). A song
+  saved here reads on firmware 1.6.1 as a project of four tracks (the fifth is dropped); older projects load with track 5 at its power-on sound.
+
+Where the text below says "the four tracks" it is describing 1.x: read it as the `NTRK` tracks (the 128 motion records are shared by all five).
+
 **v3 (four tracks):** the device has four tracks, each a synth part (since 1.0; before it, track 4
 was a GM drum track: see "Track 4 since 1.0" below). One
 of them is *selected* (ALGORITHM on the device, or `TRACK`). Every v1 / v2 command acts on the
@@ -185,7 +206,7 @@ at 1..3 and hides 6 5 8: what it sets still plays the right kit, and the device 
 
 | cmd | Request args | Reply args |
 | --- | --- | --- |
-| 1 INFO | — | version string, NENGINES, P_COUNT, G_COUNT, NSTEP, P_E0, then NENGINES engine-name strings, then (v3) NTRK (4), then (v6) CHAIN_ROWS (16), then the tagged blocks `55 01 uiCaps`, `4D 01 64 01`, `42 01 3`, `46 01 nfactory nbank`, `53 01 3`, (1.0.3) `50 01 3` and (1.0.4) `4E 01 count` (MENU settings; 12, 1.1: 15, 1.2: 17, 1.1.5: 18, 1.2: 23, 1.3: 24, 1.5: 25, 1.5.5: 32) and (1.0.5) `52 01 4` (ratchet) and (1.1) `4C 01 1` (parameter locks) and (1.2) `41 01 00 01` (128 motion records: two 7-bit bytes, LSB first; `4D 01 64 01` keeps saying 64) and `54 01 16` (a step's nudge, 1/16 of a step) and `57 01 4` (song sections: a slot per track, SONG ops 4..7) and (1.4.1) `56 01 32` (FM6's voice bank: cmds 74..77, SLOT 9..40) and (1.5) `43 01 16` (MIDI LEARN's map: cmds 78, 79) and (1.5.5) `4B 01 NCOND` (a step's condition) and (1.6) `45 01 5` (CUSTOM palette: cmds 80, 81) (below); older firmware ends earlier |
+| 1 INFO | — | version string, NENGINES, P_COUNT, G_COUNT, NSTEP, P_E0, then NENGINES engine-name strings, then (v3) NTRK (4; 5-LAB: 5), then (v6) CHAIN_ROWS (16), then the tagged blocks `55 01 uiCaps`, `4D 01 64 01`, `42 01 3`, `46 01 nfactory nbank`, `53 01 3`, (1.0.3) `50 01 3` and (1.0.4) `4E 01 count` (MENU settings; 12, 1.1: 15, 1.2: 17, 1.1.5: 18, 1.2: 23, 1.3: 24, 1.5: 25, 1.5.5: 32, 5-LAB: 33 or 34 with 2ND CORE) and (1.0.5) `52 01 4` (ratchet) and (1.1) `4C 01 1` (parameter locks) and (1.2) `41 01 00 01` (128 motion records: two 7-bit bytes, LSB first; `4D 01 64 01` keeps saying 64) and `54 01 16` (a step's nudge, 1/16 of a step) and `57 01 NTRK` (song sections: a slot per track, SONG ops 4..7; 4 up to 1.6.1, 5 in 5-LAB) and (1.4.1) `56 01 32` (FM6's voice bank: cmds 74..77, SLOT 9..40) and (1.5) `43 01 16` (MIDI LEARN's map: cmds 78, 79) and (1.5.5) `4B 01 NCOND` (a step's condition) and (1.6) `45 01 5` (CUSTOM palette: cmds 80, 81) (below); older firmware ends earlier |
 | 2 GET | scope, id | scope, id, v14 |
 | 3 SET | scope, id, v14 | scope, id, v14 (the value after clamping). Setting global `G_ENGSEL` (id from DESC label "ENG") changes the engine: its defaults, then its first preset (as on the device) |
 | 4 DUMP | — | engine, preset, then P_COUNT × v14 (the selected track), then G_COUNT × v14 (globals) |
@@ -239,7 +260,7 @@ reply.
 unused mask bits in the last group must be zero. Oversized or incomplete transfers
 are rejected; SMP_WRITE decodes at most 256 bytes, SMP_END exactly 480 bytes.
 
-**User sample slot** (80 KiB each, SAMPLE engine sets USR1..USR3; reference uploader
+**User sample slot** (80 KiB each, SAMPLE engine sets USR1..USR2; 5-LAB: two slots, USR3 retired; reference uploader
 `tools/fm1_sample_upload.py`, slot builder `sampleio.user_slot`; the editor's port of it is
 checked byte for byte by `web/test_web.mjs`): header at 0, ADPCM data at 512.
 
@@ -296,7 +317,7 @@ numbered 0..31 (the device shows U01..U32).
   = 4, stored then or sent by `UP_PUT`, is the DRUM engine with its default kit: the device rewrites it (engine 10,
   E1..E8 = DRUM KIT's {0, 64, 70, 64, 64, 100, 0, 0}, the other values and the pattern as they were). Projects
   and `PRESET` 4 / 4 do the same (a project's track keeps its steps). SET 4 itself stays (`DESC` names it "PIANO":
-  an alias, as SET 1; a `SET` of 4 lands on 0), and USR1..USR3 stay 5..7; GRAIN's SRC 4 plays PIANO.
+  an alias, as SET 1; a `SET` of 4 lands on 0), and USR1..USR2 stay 5..6 (USR3, 7, up to 1.6.1; retired in 5-LAB); GRAIN's SRC 4 plays PIANO.
 - **DRUM KIT 1..3** were HAND, CYM and H+CYM until 1.0.4 (STD with a conga / claves, a cymbal, both). Since 1.0.5
   they play the VA kits 66, 10 and 77, and a record holding one loads as that kit: `UP_GET` / `UP_LOAD` give KIT 6, 5
   or 8 (the record itself is not rewritten). Projects, motion events and `SET` do the same.
@@ -749,9 +770,9 @@ repeats (1..16); up to 16 sections.
 
 | cmd | Request args | Reply args |
 | --- | --- | --- |
-| 33 SONG | op 4 query; op 5 set, count 0..16, count × (slot T1, slot T2, slot T3, slot T4 (0..4), repeat 1..16); op 6 start; op 7 stop | op (4..7), rc, count, running 0/1, section 0..15, remaining repeats, count × (slot T1..T4, repeat) |
+| 33 SONG | op 4 query; op 5 set, count 0..16, count × (slot T1..T4 (0..4), and in 5-LAB slot T5, repeat 1..16); op 6 start; op 7 stop | op (4..7), rc, count, running 0/1, section 0..15, remaining repeats, count × (slot T1..T4 (T5 in 5-LAB), repeat) |
 
-A set must have exactly `2 + count × 5` argument bytes; rc as for ops 0..3 (1 = invalid sections, 2 = busy, 3..6 = a
+A set must have exactly `2 + count × (NTRK + 1)` argument bytes (5 each up to 1.6.1, 6 in 5-LAB); rc as for ops 0..3 (1 = invalid sections, 2 = busy, 3..6 = a
 slot a lane plays is empty; a silent lane needs none, a song of "-" only plays silence). Ops 0..3 keep their meaning: a
 set (op 1) makes each row a section with the four tracks on its slot (a slot of 4 there is invalid, rc 1); their replies
 list a row per section, the slot of its clock lane (below; every lane "-": 0) and its repeats, so an editor of before
@@ -814,15 +835,17 @@ this firmware sends 3. Requests name objects, never flash addresses.
 | 6, 7 | user preset banks (slots 1..16, 17..32) | the bank's size, or 0 if empty |
 | 8 | the FM6 patch bank of 1.0..1.0.2 (B1..B27). Since 1.0.3 always listed empty (see below) | 3472, or 0 if empty |
 | 9 | the user presets' FM6 patches (1.0.3; `up_fm6.c`: per slot a tag and the packed patch) | 3728, or 0 if none |
-| 32..34 | user sample slots 1..3: header (512 bytes) then ADPCM data | 512 + data length, or 0 if empty |
+| 10 | 5-LAB: the fifth track's half of id 0 (FT5A, linked to it) | 1280, or 0 if none |
+| 11..14 | 5-LAB: the fifth track's half of ids 2..5 | 1280, or 0 if none |
+| 32, 33 | user sample slots 1..2: header (512 bytes) then ADPCM data (34, slot 3, up to 1.6.1 and 0.9.8) | 512 + data length, or 0 if empty |
 
 Reading: `BACKUP_LIST` (no arguments) stops the transport, then takes a snapshot of the runtime object and
-answers `1, rc, count` (13 since 1.0.3, 12 with FM6 up to 1.0.2, 11 before) and, per object in the order above, `id, size u32, crc u32` (CRC-32, zlib). The other objects are read as
+answers `1, rc, count` (17 in 5-LAB 1.0.0, 13 from 1.0.3 to 0.9.8, 12 with FM6 up to 1.0.2, 11 before) and, per object in the order above, `id, size u32, crc u32` (CRC-32, zlib). The other objects are read as
 they are in RAM or flash. Then `BACKUP_GET` reads an object in pieces: `id, offset u32, count lo, count hi`
 (count 1..256, LSB first 7 bit pair) answers `id, rc, offset u32, count lo, count hi` and the data as pack7. Check each object's CRC
 against the list; if it differs the device changed, so start again.
 
-Restoring: `BACKUP_PUT` takes ids 0..9 (firmware before 1.0.3: 0..8, id 9 answers rc 1 at begin and nothing is written) (the samples are written with `SMP_BEGIN` / `SMP_WRITE` / `SMP_END`,
+Restoring: `BACKUP_PUT` takes ids 0..14 (firmware before 5-LAB: 0..9, ids 10..14 answer rc 1 at begin and nothing is written; before 1.0.3: 0..8) (the samples are written with `SMP_BEGIN` / `SMP_WRITE` / `SMP_END`,
 or `SMP_ERASE` for an empty slot). Begin: `0, id, size u32, crc u32`: size is 3840 (FUN10), 3648 (FUN9), 3584 (FUN8) or 3388 (FUN7, FUN6) for id 0,
 the settings record's size for id 1, 3840, 3648, 3584, 3388 or 0 (empty the slot) for ids 2..5, the bank's size or 0 for 6 and 7,
 3472 or 0 for 8 (the FM6 bank: its magic, layout and every byte below 128 are checked), 3728 or 0 for 9 (its magic,
@@ -1115,7 +1138,7 @@ before MIDI IN the first 21, 1.2 the first 23, 1.3 / 1.4 the first 24, 1.5 / 1.5
 | 20 | 20 | CHORD ENTRY | 0 | 0 HOLD, 1 ADD (1.2) | HOLD | 1 CONTROL |
 | 21 | 21 | MIDI IN | 0 | 0 CH1-4, 1 SEL, 2 CH5-8, 3 CH9-12, 4 CH13-16 (1.2: the project's `G_ROUTE`, global 14), 5 TRACK (1.5.5) | CH1-4 | 3 MIDI |
 | 22 | 22 | TUNE | 1 | -50..50, unit "ct" (1.2: the project's `G_TUNE`, global 3, cents) | 0 | 2 AUDIO |
-| 23 | 23 | HOME | 0 | 0 SCOPE, 1 TRACKS (1.3), 2 LEVELS (1.5; before: max 1) | SCOPE | 0 DISPLAY |
+| 23 | 23 | HOME | 0 | 0 SCOPE, 1 TRACKS (1.3); 2 LEVELS (1.5 .. 1.6.1, retired in 5-LAB) | SCOPE | 0 DISPLAY |
 | 24 | 24 | HELP | 0 | 0 OFF, 1 ON (1.5) | OFF | 4 SYSTEM |
 | 25 | 25 | SELECT | 0 | 0 BPM, 1 PAGE (1.5.5); 1.5.6 (#84): 2 MODW (the selected track's mod wheel, CC1 out), 3 VEL (the keys' velocity) | BPM | 1 CONTROL |
 | 26 | 26 | T1 CHANNEL | 0 | 0..15 "1".."16", 16 OMNI, 17 OFF (1.5.5: the project's, MIDI IN TRACK's) | 1 | 3 MIDI |
@@ -1168,7 +1191,7 @@ and 3 (see Global ids and rc above). TUNE is the first kind 1 item: value, min -
 name, then the unit "ct" (no value names), then the tab. Applied at once (MIDI IN: a block that changes lets go of the
 notes it held, as the knob did; TUNE: the next block of sound).
 
-T1..T4 CHANNEL (ids 26..29, 1.5.5, #202; the MIDI tab after MIDI IN): MIDI IN TRACK's channel of each track, the
+T1..T4 CHANNEL (ids 26..29, 1.5.5, #202; the MIDI tab after MIDI IN; 5-LAB: T5 CHANNEL, the last id, same values, default channel 5): MIDI IN TRACK's channel of each track, the
 project's like MIDI IN (rc 0: kept with the project, not in the settings record). Values 0..15 are channels 1..16, 16
 OMNI (any channel no track has), 17 OFF (the track hears none); the default of track k is channel k (value k - 1).
 They only route with MIDI IN TRACK (value 5); the device shows them dim otherwise. Applied at once: what the old
@@ -1209,8 +1232,8 @@ the oscilloscope; TRACKS the four tracks as rows: each track's cushion, engine i
 pattern's page that plays (LEN > 16: the play head's page, stopped the selected track's cursor page; a pip per page),
 a MUTE badge, the output meter; the selected track's row highlighted. Only the look changes: HOME's knobs, ALGORITHM
 and the HOME button do what they do on SCOPE. Kept in the settings record (its own byte; a value an older firmware does
-not know reads as SCOPE there). Applied at once. 1.5 (#134): LEVELS (2), the rows of TRACKS with KNOB 1..4 the LEVEL
-of T1..T4 (the GLO layer's knobs) in place of the selected track's engine's four; firmware before 1.5 reads it as SCOPE.
+not know reads as SCOPE there). Applied at once. 1.5 (#134) .. 1.6.1: LEVELS (2), the rows of TRACKS with KNOB 1..4 the LEVEL
+of T1..T4 in place of the selected track's engine's four; retired in 5-LAB (five tracks: the MIXER has the levels; a stored 2 reads as SCOPE).
 
 HELP (id 24, 1.5, Discussion #156; SYSTEM now shows USB SERIAL, RESTORE LAST and HELP, index 11, 15, 24, then
 CALIBRATION, INFO and ABOUT): ON shows a short hint (key caps and a few words) in the footer for about 2 s when a page

@@ -328,7 +328,7 @@ async function editorSamplePresets() {
   await rq(E.req.preset(4, 0));
   const set = E.parse[C.DESC](await rq(E.req.desc(0, info.pe0)));
   ok(eq(names.names, ["PIANO", "PIANO", "FLUTE", "SAX"]) && eq(set.names.slice(0, 4), ["PIANO", "PIANO", "FLUTE", "SAX"])
-    && set.names[4] === "PIANO" && eq(set.names.slice(5), ["USR1", "USR2", "USR3"]),
+    && set.names[4] === "PIANO" && eq(set.names.slice(5), ["USR1", "USR2"]),
     "SAMPLE: TRANH and PERC removed, SET 1 and 4 kept as PIANO aliases, indices unchanged");
   ok(E.aliasOf(names.names, 1) === 0 && E.aliasOf(names.names, 2) === 2 && E.aliasOf(set.names, 5) === 5 &&
      E.aliasOf(set.names, 4) === 0, "SAMPLE: an entry named like an earlier one is an alias of it");
@@ -966,8 +966,9 @@ async function editorTracks() {
   const { m, rq, ev, done } = attachMock({ watchMs: 1000 });
   const info = E.parse[C.INFO](await rq(E.req.info()));
   const tr = E.parse[C.TRACK](await rq(E.req.track()));
-  ok(info.ntrk === 4 && tr.sel === 0 && tr.ntrk === 4 && tr.tracks[0].engine === 0 && tr.tracks[1].engine === 12
-    && tr.tracks[3].engine === 10 && tr.tracks[3].preset === 0, "tracks: INFO NTRK, TRACK lists 4 parts (track 4: DRUM KIT)");
+  ok(info.ntrk === 5 && tr.sel === 0 && tr.ntrk === 5 && tr.tracks[0].engine === 0 && tr.tracks[1].engine === 12
+    && tr.tracks[3].engine === 10 && tr.tracks[3].preset === 0 && tr.tracks[4].engine === 0 && tr.tracks[4].preset === 0,
+    "tracks: INFO NTRK, TRACK lists 5 parts (track 4: DRUM KIT, track 5: the power-on sound)");
   /* the v1 commands follow the selected track */
   const d0 = E.parse[C.DUMP](await rq(E.req.dump()), info);
   const t1 = E.parse[C.TRACK](await rq(E.req.track(1)));
@@ -1028,7 +1029,7 @@ async function editorMixer() {
   const info = E.parse[C.INFO](await rq(E.req.info()));
   const PAN = 39, MUTE = 40;
   const m0 = await E.mixer.read(rq, info, { pan: PAN });
-  ok(m0.ntrk === 4 && m0.tracks.length === 4 && m0.tracks[1].pan === -24 && m0.tracks[2].pan === 20 && m0.tracks[3].engine === 10
+  ok(m0.ntrk === 5 && m0.tracks.length === 5 && m0.tracks[1].pan === -24 && m0.tracks[2].pan === 20 && m0.tracks[3].engine === 10
     && m0.tracks.every((x) => Number.isInteger(x.level) && (x.mute === 0 || x.mute === 1)), "mixer: read = TRACK + pan of every track (TRACK_DUMP)");
   /* level / mute of tracks that are not selected (clamped) */
   const a = await E.mixer.setMix(rq, 2, 70, 1);
@@ -1095,8 +1096,10 @@ async function editorTrackParam() {
   ok(g.track === 1 && g.id === PAN && g.value === -24 && p2 === -40 && p1 === 63 && alg.value === 32 && lv.value === 0 && td2.p[PAN] === -40
     && sel.sel === 0 && (sent[C.TRACK] || 0) === tracks0 + 1 && ev.pushes.length === pushes,
     "v4: TRACK_PARAM get / set on other tracks (clamped as SET, selection kept, no push)");
-  const bad = await rq(E.req.trackParam(4, PAN), { timeout: 60, retries: 0, quiet: true }).then(() => "reply", () => "none");
-  ok(bad === "none", "v4: TRACK_PARAM of track 5: no reply");
+  const t5 = E.parse[C.TRACK_PARAM](await rq(E.req.trackParam(4, PAN)));
+  ok(t5.track === 4 && t5.id === PAN, "v4: TRACK_PARAM of track 5 answers (5-LAB: five tracks)");
+  const bad = await rq(E.req.trackParam(5, PAN), { timeout: 60, retries: 0, quiet: true }).then(() => "reply", () => "none");
+  ok(bad === "none", "v4: TRACK_PARAM of track 6: no reply");
   /* device-side changes: CHANGED for the selected track, TRACK_CHANGED for the others */
   m.sim.param(2, PAN, 30);
   m.sim.param(3, MUTE, 1);

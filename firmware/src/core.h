@@ -9,7 +9,7 @@
 
 /* ------------------------------------------------------------ sizes --- */
 #define NVOICE 8                 /* voices per part, and the budget shared by all parts */
-#define NPART 4                  /* synth parts: tracks 1..4 */
+#define NPART 5                  /* synth parts: tracks 1..5 (5-LAB; 1..4 before) */
 #define NTRK NPART               /* tracks (the formats and the protocol count these): every track is a part */
 #define NSTEP 64
 #define HALF_FRAMES 128          /* I2S half buffer: 2.9 ms at 44.1 kHz (a key waits 0..1 half, then plays 1 half later) */
@@ -122,7 +122,7 @@ static int drum_from_phys(uint32_t engine, int16_t *e)
 }
 
 /* SAMPLE SET 4 was PERC, the GM-mapped drum kit (tools/gen_samples.py); retired after 1.0.2: its index stays
- * (SET / GRAIN SRC 4 is an alias of PIANO, USR1..3 keep 5..7). A sound that selected it is the DRUM engine with
+ * (SET / GRAIN SRC 4 is an alias of PIANO, USR1..2 keep 5..6). A sound that selected it is the DRUM engine with
  * its default kit (eng_drum.c DRUM_PRESETS[0]: the same GM key map, so its patterns still play as drums): its E
  * values become the kit's, the rest of the sound (mix, sends, matrix, ..) stays. 1 = it was one (its engine is
  * ENGI_DRUM now); projects (project.c proj_perc), user presets (upreset.c up_migrate), factory preset 4 and
@@ -226,25 +226,34 @@ static void step_set_nudge(step_t *s, int32_t v)
  * value holds until another one changes it. One record per (track, step, id), of either kind */
 #define MOTION_LOCK 0x80u
 #define MOTION_ID(e) ((uint32_t)(e)->param & 0x7Fu)
-typedef struct { uint8_t place, param; int8_t value; } motion_event_t;
+/* 5-LAB: place = track * 64 + step (0..319 with five tracks: a uint16_t; the disk keeps 3 bytes, FUN10: motion_disk_t) */
+typedef struct { uint16_t place; uint8_t param; int8_t value; } motion_event_t;
 typedef struct { uint8_t count, on, rsv[2]; motion_event_t event[MOTION_MAX]; } motion_store_t;
-_Static_assert(sizeof(motion_store_t) == 388u, "motion disk layout (FUN10)");
+#define NTRK_DISK 4u             /* the tracks FUN10 stores (track 5 has its own object: project.c PROJ5) */
+typedef struct { uint8_t place, param; int8_t value; } motion_disk_t;
+typedef struct { uint8_t count, on, rsv[2]; motion_disk_t event[MOTION_MAX]; } motion_store_disk_t;
+_Static_assert(sizeof(motion_store_disk_t) == 388u, "motion disk layout (FUN10)");
 #define CHAIN_ROWS 16u
 /* A song section (1.2, FUN10): the PROJECT slot each track plays (0..3, A..D; CHAIN_SILENT "-": that track plays
  * nothing there) and its repeats (1..16). Up to 1.1 a row was {slot, repeat}, all four tracks on that slot
  * (chain_v9_t, FUN6..FUN9): it loads as a section with the four on it (song_chain.c chain_from_v9) */
 #define CHAIN_SILENT 4u
 typedef struct { uint8_t slot[NTRK], repeat; } chain_row_t;
+typedef struct { uint8_t slot[NTRK_DISK], repeat; } chain_row_disk_t;   /* frozen: FUN10 rows, four tracks */
 typedef struct {
     uint8_t count, rsv[3];
     chain_row_t row[CHAIN_ROWS];
 } chain_config_t;
+typedef struct {
+    uint8_t count, rsv[3];
+    chain_row_disk_t row[CHAIN_ROWS];
+} chain_disk_t;
 typedef struct { uint8_t slot, repeat; } chain_row_v9_t;   /* frozen: the rows of FUN6..FUN9 */
 typedef struct {
     uint8_t count, rsv[3];
     chain_row_v9_t row[CHAIN_ROWS];
 } chain_v9_t;
-_Static_assert(sizeof(chain_config_t) == 84u && sizeof(chain_v9_t) == 36u, "song chain layouts (FUN10 / FUN6..FUN9)");
+_Static_assert(sizeof(chain_disk_t) == 84u && sizeof(chain_v9_t) == 36u, "song chain layouts (FUN10 / FUN6..FUN9)");
 
 typedef struct track {
     int16_t p[P_COUNT];

@@ -3,7 +3,7 @@
 Felucca is Leo Kuroshita's ([@kurogedelic](https://github.com/kurogedelic), [Hügelton Instruments](https://hugelton.com)). It uses and
 thanks the work below; each keeps its own licence (see [LICENSE](LICENSE), [LICENSING.md](LICENSING.md) and [LICENSES/](LICENSES/)).
 
-- **LAB-4T** (this fork of Felucca 1.6.1, [CHANGES.md](CHANGES.md)): CLK kept in the settings; the FX HOLD release of GLO mutes; the KNOB ACCEL tuning, from the
+- **5-LAB** (this fork of Felucca 1.6.1, [CHANGES.md](CHANGES.md)): CLK kept in the settings; the FX HOLD release of GLO mutes; the KNOB ACCEL tuning, from the
   knob acceleration of [JIANT](https://github.com/juanjiant-bit/JIANT) by juanjiant-bit (GPL-3.0).
   Developed with the assistance of an AI coding agent (Claude), the direction and every test on the device are the maintainer's.
 - **[Hügelton Instruments](https://hugelton.com)** (Leo Kuroshita, [@kurogedelic](https://github.com/kurogedelic)):

@@ -3,10 +3,13 @@
 // Local, complete musical archives. Requests name whitelisted objects, never flash addresses.
 // 8: the FM6 patch bank of 1.0..1.0.2 (listed empty since 1.0.3: a restore of an older archive's bank moves its patches
 // into the user presets restored before it); 9: the user presets' FM6 patches (1.0.3)
-export const BACKUP_IDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 32, 33, 34];
-const BACKUP_IDS_V2 = BACKUP_IDS.filter((id) => id !== 9);              // 1.0..1.0.2, and their archives
+// 5-LAB: 10 the fifth track's half of the music as it is (id 0), 11..14 of slots A..D (ids 2..5); the user samples are
+// ids 32 and 33 (USR3 is retired: id 34 of an older archive is read and skipped on a restore)
+export const BACKUP_IDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 32, 33];
+const BACKUP_IDS_V3 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 32, 33, 34];      // 1.0.3 .. 5-LAB 0.9.8, and their archives
+const BACKUP_IDS_V2 = BACKUP_IDS_V3.filter((id) => id !== 9);           // 1.0..1.0.2, and their archives
 const BACKUP_IDS_V1 = BACKUP_IDS_V2.filter((id) => id !== 8);           // firmware before FM6, and its archives
-const idsOf = (n) => [BACKUP_IDS, BACKUP_IDS_V2, BACKUP_IDS_V1].find((ids) => ids.length === n) || null;
+const idsOf = (n) => [BACKUP_IDS, BACKUP_IDS_V3, BACKUP_IDS_V2, BACKUP_IDS_V1].find((ids) => ids.length === n) || null;
 export const BACKUP_CMD = { LIST: 65, GET: 66, PUT: 67 };
 const BACKUP_CHUNK = 256;
 export const bkU32 = (n) => Array.from({ length: 5 }, (_, i) => (n >>> (i * 7)) & (i === 4 ? 15 : 127));
@@ -114,7 +117,15 @@ export async function restoreBackup(request, file, onProgress = () => {}) {
   const ask = async (r, o = {}) => request(r, { timeout: 4000, retries: 0, ...o });
   const put = async (args) => { const a = await ask([BACKUP_CMD.PUT, args]); bkCheck(a[2]); return a; };
   // Restore live music last. Other objects commit individually; a disconnect can leave a partial restore.
-  for (const o of [...archive.objects.slice(2), archive.objects[1], archive.objects[0]]) {
+  // (5-LAB: id 10, the fifth track's half of the live music, goes right after id 0, which it completes)
+  const by = (id) => archive.objects.find((o) => o.id === id);
+  const sequence = [...archive.objects.filter((o) => o.id >= 2 && o.id !== 10), by(1), by(0), ...(by(10) ? [by(10)] : [])];
+  const skipped = [];
+  for (const o of sequence) {
+    if (o.id === 34) {                     // USR3 is retired: this firmware has no third user slot
+      if (o.size) skipped.push("USR3");
+      done += o.size; onProgress(done, total); continue;
+    }
     if (o.id >= 32) {
       const slot = o.id - 32;
       const check = (a) => { if (a[0] !== slot) throw new Error("Unexpected sample reply"); bkCheck(a.at(-1)); };
@@ -131,7 +142,7 @@ export async function restoreBackup(request, file, onProgress = () => {}) {
         done += 512; onProgress(done, total);
       }
     } else {
-      if (o.id === 9) {                    // firmware before 1.0.3 does not take id 9 (rc 1 at begin, nothing written): skip it
+      if (o.id === 9 || o.id >= 10) {      // firmware before 1.0.3 does not take id 9, one before 5-LAB ids 10..14 (rc 1 at begin, nothing written): skip it
         const a = await ask([BACKUP_CMD.PUT, [0, o.id, ...bkU32(o.size), ...bkU32(o.crc)]]);
         if (a[2] === 1) { done += o.size; onProgress(done, total); continue; }
         bkCheck(a[2]);
@@ -146,7 +157,7 @@ export async function restoreBackup(request, file, onProgress = () => {}) {
       } catch (e) { await put([3, o.id]).catch(() => {}); throw e; }
     }
   }
-  return archive;
+  return Object.assign(archive, { skipped });
 }
 
 // Installer connection: no editor page or watcher owns this input simultaneously.

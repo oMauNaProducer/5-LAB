@@ -469,7 +469,7 @@ static void ui_leds(void)
 /* Predictable hardware response (#23): each decoded detent is one value step; a fast turn keeps its full signed
  * detent count. MENU > KNOB ACCEL ON (#52) multiplies a fast turn of a wide value (range > 16, not a list of
  * names; the FX and GLO layers' knobs too, #126): the faster the turn the wider the sweep, a slow turn is fine
- * tuning, one value a detent. LAB-4T took its tuning from JIANT's (juanjiant-bit, GPL-3.0): the speed is
+ * tuning, one value a detent. 5-LAB took its tuning from JIANT's (juanjiant-bit, GPL-3.0): the speed is
  * the time per detent, ACC_RATE / ms -> 40 ms x2, 27 ms x3, 20 ms x4, 10 ms x8, 5 ms x16, capped by the range:
  * x2 up to 32 values, x4 up to 64, x8 up to 100, x16 above (a flick across 0..127 in a dozen detents). The main loop
  * reads the knobs many times a frame (main.c), so a read holds one detent as a rule. Only the longer of this read's and

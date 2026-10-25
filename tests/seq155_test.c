@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
 /* 1.5.5 sequencer (#209 #186 #85), on the real sequencer and UI sources (with the stubs of tests/ui_test.c):
  *   CONDITIONS  a step's 1:2 .. 4:4 by the track's loops (each track its own LEN), counted from PLAY, RESTART, each SONG
- *               section; FILL / !FILL with GLO + E4 held (and the GLO lock); a NUDGE early step 1 the next loop's; a
+ *               section; FILL / !FILL with GLO + F5 held (and the GLO lock); a NUDGE early step 1 the next loop's; a
  *               failed condition applies no lock; a step without one rolls its chance as before (the same draws)
  *   the knob    DETAIL's KNOB 1 past 100 % into the conditions (one a detent, a fast turn stops at 100), AUTOMATION's
  *               COND rows, the marks, EDIT back to 100 %
@@ -290,19 +290,19 @@ static int cond_ui(void)
     return bad;
 }
 
-/* the FILL key: GLO + E4 held; the lock (two taps) and E4 */
+/* the FILL key: GLO + F5 held; the lock (two taps) and F5 */
 static int fill_key(void)
 {
     int bad = 0, ok;
     melody(1);
     frames(400);
     btn_down(B_GLO); frames(100);
-    key_down(key_at(0, 6)); frames(50);                /* E4: white place 6 */
+    key_down(key_at(0, 14)); frames(50);                /* F5: white place 14 */
     ok = seq_fill == 1u && ui.layer == LAYER_GLO;
-    key_up(key_at(0, 6)); frames(50);
+    key_up(key_at(0, 14)); frames(50);
     ok &= !seq_fill;
     btn_up(B_GLO); frames(400);
-    bad += check("FILL: GLO + E4 held is FILL, let go it is not", ok);
+    bad += check("FILL: GLO + F5 held is FILL, let go it is not", ok);
     ui_power_on();
     return bad;
 }

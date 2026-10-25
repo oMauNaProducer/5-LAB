@@ -8,7 +8,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LAB-4T Editor</title>
+<title>5-LAB Editor</title>
 <style>
   /* Fukiai: Hügelton Instruments' icon font (MIT, FUKIAI-LICENSE.txt). Icons are text in .ic spans;
      they stay hidden until the face has loaded (html.fk), so a missing font never shows boxes. */
@@ -157,7 +157,7 @@
 <body>
 <main>
   <button class="lang" id="lang"></button>
-  <h1>LAB-4T Editor</h1>
+  <h1>5-LAB Editor</h1>
   <p class="dim"><a href="../installer/" style="color:inherit" data-t="installer"></a></p>
   <!-- always visible: connection, version, sync mode, the tabs and (Sound / Sequencer / Tracks) the track selector -->
   <header class="top">
@@ -343,7 +343,7 @@
     </div>
   </section>
 
-  <footer>LAB-4T, a fork of Felucca. Felucca by Leo Kuroshita (@kurogedelic), <a href="https://hugelton.com" target="_blank" rel="noopener">Hügelton Instruments</a>. GPL-3.0.<br>
+  <footer>5-LAB, a fork of Felucca. Felucca by Leo Kuroshita (@kurogedelic), <a href="https://hugelton.com" target="_blank" rel="noopener">Hügelton Instruments</a>. GPL-3.0.<br>
     <span data-t="foot"></span> M-VAVE and FM-1 are trademarks of their respective owners.<br>
     <a href="FUKIAI-LICENSE.txt" data-t="iconsCredit"></a></footer>
 </main>
@@ -1719,7 +1719,7 @@ function makeMockDevice(opt = {}) {
       presets: [P("PULSE LD", [0, 0, 32, 0, 0, 20, 0, 127], [0, 60, 90, 30], 1, 4), P("WAVE BASS", [1, 1, 0, 0, 0, 0, 0, 90], [0, 50, 70, 20], 1, 2),
         P("ARP 8BIT", [2, 0, 96, 0, 0, 0, 2, 110], [0, 60, 80, 40], 0, 13), P("WAVE LEAD", [0, 4, 92, 0, 0, 18, 0, 110], [0, 70, 90, 30], 1, 3),
         P("STEP LEAD", [4, 0, 40, 34, 0, 16, 0, 127], [0, 64, 127, 55], 1, 4)] },
-    { name: "SAMPLE", titles: ["SET", "TONE"], edit: [E("SET", ["PIANO", "PIANO", "FLUTE", "SAX", "PIANO", "USR1", "USR2", "USR3"], 0), D("TUNE", F.SEMI, -24, 24, 0), D("BITS", F.INT, 0, 127, 0),
+    { name: "SAMPLE", titles: ["SET", "TONE"], edit: [E("SET", ["PIANO", "PIANO", "FLUTE", "SAX", "PIANO", "USR1", "USR2"], 0), D("TUNE", F.SEMI, -24, 24, 0), D("BITS", F.INT, 0, 127, 0),
         E("LOOP", NONOFF, 1), D("CUT", F.INT, 0, 127, 127), NONE, D("DRV", F.PCT, 0, 127, 0), NONE],
       presets: [P("PIANO", [0, 0, 0, 1, 127, 0, 0, 0], [0, 127, 127, 70]), P("PIANO", [0, 0, 0, 1, 127, 0, 0, 0], [0, 127, 127, 70]),
         P("FLUTE", [2, 0, 0, 1, 127, 0, 0, 0], [12, 80, 120, 60]), P("SAX", [3, 0, 0, 1, 127, 0, 0, 0], [12, 80, 120, 60])] },
@@ -1739,7 +1739,7 @@ function makeMockDevice(opt = {}) {
       presets: [P("FULL ORGAN", [15, 0, 0, 0, 0, 30, 20, 1], [0, 64, 127, 45], 0, 5), P("JAZZ PERC", [4, 0, 0, 0, 2, 50, 8, 1], [0, 64, 127, 40], 0, 3),
         P("GOSPEL", [6, 0, 0, 0, 1, 60, 40, 2], [0, 64, 127, 45], 0, 6), P("SOFT FLUTE", [1, 0, -2, 0, 0, 10, 0, 1], [0, 64, 127, 55], 0, 5),
         P("ROCK DRIVE", [7, 0, 0, 0, 0, 70, 100, 2], [0, 64, 127, 40], 0, 4)] },
-    { name: "GRAIN", titles: ["GRAN", "SPRY"], edit: [E("SRC", ["PIANO", "PIANO", "FLUTE", "SAX", "PIANO", "USR1", "USR2", "USR3"], 0),
+    { name: "GRAIN", titles: ["GRAN", "SPRY"], edit: [E("SRC", ["PIANO", "PIANO", "FLUTE", "SAX", "PIANO", "USR1", "USR2"], 0),
         D("POS", F.PCT, 0, 127, 32), D("SIZE", F.PCT, 0, 127, 80), D("DENS", F.PCT, 0, 127, 80),
         D("PTCH", F.SEMI, -24, 24, 0), D("SPRD", F.PCT, 0, 127, 30), D("RAND", F.PCT, 0, 127, 10), D("TONE", F.PCT, 0, 127, 127)],
       presets: [P("CLOUD PAD", [2, 50, 92, 88, 0, 40, 14, 100], [70, 90, 120, 90], 0, 5), P("GLITCH", [3, 64, 24, 112, 0, 100, 90, 127], [0, 70, 100, 30], 0, 4),
@@ -1770,7 +1770,7 @@ function makeMockDevice(opt = {}) {
         P("FM BASS", [0, 0, 0, 0, 0, 0, 0, 2], [0, 0, 127, 0], 1, 2), P("BRASS", [0, 0, 0, 0, 0, 0, 0, 3], [0, 0, 127, 0], 0, 4),
         P("PAD", [0, 0, 0, 0, 0, 0, 30, 4], [0, 0, 127, 0], 0, 5), P("MARIMBA", [0, 0, 0, 0, 0, 0, 0, 5], [0, 0, 127, 0], 0, 3),
         P("ORGAN", [0, 0, 0, 0, 0, 0, 0, 6], [0, 0, 127, 0], 0, 6), P("PLUCK", [0, 0, 0, 0, 0, 0, 0, 7], [0, 0, 127, 0], 0, 13)] },
-    { name: "SLICE", titles: ["SLCE", "PLAY"], edit: [E("SRC", ["BREAK", "USR1", "USR2", "USR3", "PIANO"], 0),
+    { name: "SLICE", titles: ["SLCE", "PLAY"], edit: [E("SRC", ["BREAK", "USR1", "USR2", "PIANO"], 0),
         E("DIV", ["4", "8", "16", "32", "AUTO", "MAN"], 2), D("START", F.INT, 0, 31, 0), D("PTCH", F.SEMI, -24, 24, 0),
         E("MODE", ["ONE", "GATE", "LOOP"], 0), E("REV", ["OFF", "ON"], 0), D("DCAY", F.TIME, 0, 127, 127), D("TONE", F.INT, 0, 127, 127)],
       presets: [P("CHOP", [0, 2, 0, 0, 0, 0, 127, 127], [0, 127, 127, 30], 0, 9), P("STUTTER", [0, 1, 0, 0, 1, 0, 90, 110], [0, 127, 127, 12], 0, 10)] },
@@ -1808,16 +1808,16 @@ function makeMockDevice(opt = {}) {
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const enumOrig = (d, v) => d.fmt === F.ENUM && d.names ? aliasOf(d.names, v - d.min) + d.min : v;   /* params.c enum_orig */
   /* four tracks (firmware v3), four synth parts (1.0); engine / preset / p / step below are the selected track's */
-  const NTRK = 4;
+  const NTRK = 5;
   const newTrack = () => ({ engine: 0, preset: 0, fm6: FM6.INIT_PK.slice(),
     p: TP.map((d) => d.def).concat(new Array(8).fill(0)),
     motion: {on: true, events: []},
     step: Array.from({ length: NSTEP }, () => ({ chance: 100, ratchet: 1, n: 0, notes: [0, 0, 0, 0], time: 2, flags: 0, vel: 0, hit: 0, acc: 0 })) });
   const st = {
-    tracks: [0, 1, 2, 3].map(newTrack), sel: 0, rec: 0,
+    tracks: [0, 1, 2, 3, 4].map(newTrack), sel: 0, rec: 0,
     g: GP.map((d) => d.def),
     slots: [null, null, null, null], songRows: [], chainPlaying: false, chainRow: 0, chainRemaining: 0,
-    smp: [0, 1, 2].map(() => ({ flash: new Uint8Array(SMP.SLOT_SIZE).fill(0xFF), zones: 0, name: "", len: 0, next: SMP.DATA_OFF })),
+    smp: [0, 1].map(() => ({ flash: new Uint8Array(SMP.SLOT_SIZE).fill(0xFF), zones: 0, name: "", len: 0, next: SMP.DATA_OFF })),
     bank: new Array(opt.slots || 32).fill(null),     /* user presets: {engine, name, p, pattern, grid, fm6 (FM6: its patch)} */
     uiCaps: opt.legacy || opt.v3 || opt.v5 ? 0 : opt.uiCaps ?? 9,
     palette: 0, font: 0, monitor: 0, filter: 0, bankSig: 0,
@@ -2230,7 +2230,7 @@ function makeMockDevice(opt = {}) {
         break;
       /* user sample slots: the header is checked like the firmware's ed_smp_end() */
       case CMD.SMP_BEGIN: case CMD.SMP_ERASE: {
-        if (a.length < 1 || a[0] >= 3) return null;
+        if (a.length < 1 || a[0] >= 2) return null;
         const u = st.smp[a[0]];
         if (cmd === CMD.SMP_ERASE) u.flash.fill(0xFF); else u.flash.fill(0xFF, 0, 4096);
         u.zones = 0; u.name = ""; u.len = 0; u.next = SMP.DATA_OFF;
@@ -2238,7 +2238,7 @@ function makeMockDevice(opt = {}) {
         break;
       }
       case CMD.SMP_WRITE: {
-        if (a.length < 5 || a[0] >= 3) return null;
+        if (a.length < 5 || a[0] >= 2) return null;
         const u = st.smp[a[0]], off = a[1] | (a[2] << 7) | (a[3] << 14), dat = unpack7(a.slice(4));
         let rc = 0;
         if (off < SMP.DATA_OFF || (off & 0xFF) || !dat.length || off + dat.length > SMP.SLOT_SIZE || dat.length > 256) rc = 1;
@@ -2251,7 +2251,7 @@ function makeMockDevice(opt = {}) {
         break;
       }
       case CMD.SMP_END: {
-        if (a.length < 2 || a[0] >= 3) return null;
+        if (a.length < 2 || a[0] >= 2) return null;
         const u = st.smp[a[0]], hd = unpack7(a.slice(1)), dv = new DataView(hd.buffer);
         let rc = 0;
         if (hd.length < SMP.HDR_LEN || dv.getUint32(0, true) !== 0x504D5346 || dv.getUint16(4, true) !== 1) rc = 2;
@@ -2270,7 +2270,7 @@ function makeMockDevice(opt = {}) {
         break;
       }
       case CMD.SMP_INFO:
-        b(3); b(SMP.SLOT_SIZE / 1024);
+        b(st.smp.length); b(SMP.SLOT_SIZE / 1024);
         st.smp.forEach((u) => { b(u.zones); s(u.zones ? u.name : ""); b(u.zones ? Math.ceil(u.len / 1024) : 0); });
         break;
       default:
@@ -2520,7 +2520,7 @@ const TEXT = {
     fm6NeedDevice: "FM-1 を接続すると 6-OP FM の音色を編集してトラックへ送れます。",
     fm6NoFw: "このファームウェアには 6-OP FM（FM6）がありません。Felucca 1.0 以降に更新すると使えます。",
     motion: "オートメーション", motionOn: "再生", motionClear: "オートメーションを消去", motionConfirm: "選択トラックのオートメーションを消しますか？", chance: "確率 %", ratchet: "ラチェット", motionStep: "ステップ", motionParam: "パラメーター", motionValue: "値",
-    backupTitle: "全体バックアップ", backupExport: "バックアップ保存", backupImport: "バックアップ復元", backupHelp: "現在の曲・A〜D・音色バンク・ユーザーサンプル・設定を、このパソコンへ保存。", backupOld: "全体バックアップには対応版への更新が必要です。", backupConfirm: "全体バックアップを復元しますか？ 現在の曲、保存データとサンプルを置き換えます。USBを抜かないでください。", backupWorking: "バックアップ処理中 ", backupDone: "バックアップを保存しました", backupRestored: "全体バックアップを復元しました",
+    backupTitle: "全体バックアップ", backupExport: "バックアップ保存", backupImport: "バックアップ復元", backupHelp: "現在の曲・A〜D・音色バンク・ユーザーサンプル・設定を、このパソコンへ保存。", backupOld: "全体バックアップには対応版への更新が必要です。", backupConfirm: "全体バックアップを復元しますか？ 現在の曲、保存データとサンプルを置き換えます。USBを抜かないでください。", backupWorking: "バックアップ処理中 ", backupDone: "バックアップを保存しました", backupRestored: "全体バックアップを復元しました", backupSkipped: "（USR3は復元されません：このファームウェアのユーザースロットは2つです）",
     deviceDisplay: "本体の画面",
     deviceDisplayHelp: "FM-1 の画面に反映し、保存します。再生中の変更は停止後に保存されます。",
     devicePresets: "本体のプリセット",
@@ -2623,7 +2623,7 @@ const TEXT = {
     fm6NeedDevice: "Connect the FM-1 to edit 6-OP FM voices and send them to a track.",
     fm6NoFw: "This firmware has no 6-OP FM (FM6). Update to Felucca 1.0 or later to use it.",
     motion: "Automation", motionOn: "Play automation", motionClear: "Clear automation", motionConfirm: "Clear this track's automation?", chance: "Chance %", ratchet: "Ratchet", motionStep: "Step", motionParam: "Parameter", motionValue: "Value",
-    backupTitle: "Complete backup", backupExport: "Save backup", backupImport: "Restore backup", backupHelp: "Save the current music, A–D, sound banks, user samples and settings to this computer.", backupOld: "Complete backups need firmware with archive support.", backupConfirm: "Restore this complete backup? Current music, saved data and samples will be replaced. Keep USB connected.", backupWorking: "Backing up / restoring ", backupDone: "Backup saved", backupRestored: "Complete backup restored",
+    backupTitle: "Complete backup", backupExport: "Save backup", backupImport: "Restore backup", backupHelp: "Save the current music, A–D, sound banks, user samples and settings to this computer.", backupOld: "Complete backups need firmware with archive support.", backupConfirm: "Restore this complete backup? Current music, saved data and samples will be replaced. Keep USB connected.", backupWorking: "Backing up / restoring ", backupDone: "Backup saved", backupRestored: "Complete backup restored", backupSkipped: " (USR3 was not restored: this firmware has two user sample slots)",
     deviceDisplay: "Device display",
     deviceDisplayHelp: "Changes apply to the FM-1 screen and save. Changes made while playing save after STOP.",
     devicePresets: "Device presets",
@@ -3381,8 +3381,8 @@ $("backup-file").addEventListener("change", () => {
     const { readBackup, restoreBackup } = await backupModule();
     const archive = readBackup(await file.text()); assertSession(d);
     if (!confirm(t("backupConfirm"))) return;
-    await restoreBackup((r, o) => sessionRequest(d, r, o), archive, backupProgress);
-    await load(d); sayK("backupRestored");
+    const done = await restoreBackup((r, o) => sessionRequest(d, r, o), archive, backupProgress);
+    await load(d); sayK("backupRestored", done.skipped.length ? t("backupSkipped") : "");
   });
 });
 

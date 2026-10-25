@@ -178,8 +178,8 @@ int main(void)
 
     reset();
     trk[0].step[0] = (step_t){{60}, 1, ST_NOTE, 0, 96, 0, 0};
-    bad += check("LIST captures the runtime: 13 objects (id 8 empty, id 9 the FM6 patches), runtime 3840 B (FUN10)",
-                 list(0, &len, &crc) == 0 && rep[2] == 13u && len == sizeof(project_store_t) && len == 3840u &&
+    bad += check("LIST captures the runtime: 17 objects (id 8 empty, id 9 the FM6 patches, ids 10..14 the fifth track's halves), runtime 3840 B (FUN10)",
+                 list(0, &len, &crc) == 0 && rep[2] == 17u && len == sizeof(project_store_t) && len == 3840u &&
                  crc == st_crc32(ED_BK_RAW, len));
     bad += check("an empty project slot lists as length 0", list(2, &len, &crc) == 0 && len == 0);
     bad += check("GET of the runtime copy", get(0, 0, 64) == 0);
@@ -377,7 +377,7 @@ int main(void)
         bad += check("an id 9 of another layout is refused (2), the patches kept",
                      put_all(9, &got, sizeof got, st_crc32(&got, sizeof got)) == 2u && !upf_get(0, pk));
         bad += check("an id 9 of the wrong size is refused at begin (1)", put_begin(9, sizeof got - 4u, 0) == 1u);
-        bad += check("an id 10 is refused (1)", put_begin(10, 0, 0) == 1u);
+        bad += check("an id 15 is refused (1)", put_begin(15, 0, 0) == 1u);
     }
     memcpy(&st, &proj_slot[2], sizeof st);
     erase_error = 1;

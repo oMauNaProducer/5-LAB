@@ -166,7 +166,9 @@ static int projects(void)
     trk[3].step[5].hit = 0x81; trk[3].step[5].acc = 0x80; trk[3].step[5].time = ST_NOTE;
     step_set_ratchet(&trk[3].step[5], 4);
     project_capture(&before);
-    ok = proj_pack(&packed, &before) && proj_import(&after, &packed, sizeof packed) && !memcmp(&before, &after, sizeof before);
+    {   proj5_store_t h;                                  /* (5-LAB: both halves) */
+        ok = proj_pack_pair(&packed, &h, &before) && proj_import5(&after, &packed, sizeof packed, &h) && !memcmp(&before, &after, sizeof before);
+    }
     for (i = 0; ok && i < 8u; i++)
         ok &= step_ratchet(&after.t[0].step[i]) == 1u + i % 4u && step_chance(&after.t[0].step[i]) == step_chance(&before.t[0].step[i]) &&
               after.t[0].step[i].vel == before.t[0].step[i].vel;
@@ -181,7 +183,7 @@ static int projects(void)
     project_capture(&before);
     proj_pack(&packed, &before);
     ok = 1;
-    for (k = 0, pos = 68u; k < NTRK; k++, pos += P_COUNT + 2u + NSTEP * 9u)
+    for (k = 0, pos = 68u; k < NTRK_DISK; k++, pos += P_COUNT + 2u + NSTEP * 9u)
         for (i = 0; i < NSTEP; i++)
             ok &= packed.raw[pos + P_COUNT + 2u + i * 9u + 5u] < 128u && packed.raw[pos + P_COUNT + 2u + i * 9u + 8u] < 128u;
     bad += check("  a project without ratchets: every velocity and chance byte below 128, as firmware before wrote", ok);
@@ -202,10 +204,10 @@ static int projects(void)
     {   /* FUN6 (10-byte steps): only accent and slide come over, x1 */
         project_v6_t v6;
         memset(&v6, 0, sizeof v6);
-        v6.magic = PROJ_MAGIC_V6; v6.size = sizeof v6; v6.parts = NPART; v6.phys = PROJ_PHYS;
+        v6.magic = PROJ_MAGIC_V6; v6.size = sizeof v6; v6.parts = NTRK_DISK; v6.phys = PROJ_PHYS;
         memcpy(v6.g, before.g, sizeof v6.g);
         memset(&v6.chain, 0, sizeof v6.chain);
-        for (k = 0; k < NTRK; k++) {
+        for (k = 0; k < NTRK_DISK; k++) {
             for (i = 0; i < 69u; i++) v6.t[k].p[i] = TP[i < 61u ? i : i - 61u + P_E0].def;
             v6.t[k].step[0] = (step10_t){{60}, 1, ST_NOTE, 0xFBu, 100, 0, 0};   /* (stray high bits) */
         }

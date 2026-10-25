@@ -83,6 +83,7 @@ static int chain_from_v9(chain_config_t *c, const chain_v9_t *o)
         if (o->row[i].slot >= 4u || !o->row[i].repeat || o->row[i].repeat > 16u)
             return 0;
         c->row[i] = chain_row_of(o->row[i].slot, o->row[i].repeat);
+        c->row[i].slot[NTRK_DISK] = CHAIN_SILENT;   /* (5-LAB: a song of before has no fifth lane: it plays nothing) */
     }
     c->count = o->count;
     return 1;

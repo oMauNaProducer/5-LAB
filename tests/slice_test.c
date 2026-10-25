@@ -394,7 +394,7 @@ int main(int argc, char **argv)
     for (i = 0; i < nh; i++)
         printf(" %.1f", hits[i] * 1000.0 / 22050.0);
     printf("\n");
-    check("USR2 / USR3: empty, no material", !slc_get(2) && !slc_get(3), 0);
+    check("USR2: empty, no material (5-LAB: USR3 retired)", !slc_get(2), 0);
 
     /* 3 */
     for (bad = 0, i = 0; i < 16u; i++)
@@ -852,13 +852,13 @@ int main(int argc, char **argv)
 #else
     check("PIANO (SRC 4): none in a build without the CC0 samples", !slc_get(SLC_SRC_PIANO), 0);
 #endif
-    check("SRC: BREAK USR1 USR2 USR3 PIANO (append-only: 1.0.3's numbers kept)",
-          ENG_SLICE.edit[0].max == 4 && str_eq(N_SLC_SRC[0], "BREAK") && str_eq(N_SLC_SRC[1], "USR1") &&
-          str_eq(N_SLC_SRC[3], "USR3") && str_eq(N_SLC_SRC[4], "PIANO") && SLC_BREAK.len != 0u, 0);
+    check("SRC: BREAK USR1 USR2 PIANO (5-LAB: USR3 retired, PIANO 3; 1.0.3's numbers kept below it)",
+          ENG_SLICE.edit[0].max == 3 && str_eq(N_SLC_SRC[0], "BREAK") && str_eq(N_SLC_SRC[1], "USR1") &&
+          str_eq(N_SLC_SRC[2], "USR2") && str_eq(N_SLC_SRC[3], "PIANO") && SLC_BREAK.len != 0u, 0);
     sine_ok("SLICE on an empty USR2: A4", sine_run(SLC_ENG, 2, 69), 440.0);
     sine_ok("SLICE on an empty USR2: A3", sine_run(SLC_ENG, 2, 57), 220.0);
     sine_ok("SAMPLE on an empty USR2: A4", sine_run(4u, (int16_t)(SMP_NSETS + 1), 69), 440.0);
-    sine_ok("GRAIN on an empty USR3: C5", sine_run(8u, (int16_t)(SMP_NSETS + 2), 72), 523.25);
+    sine_ok("GRAIN on an empty USR2: C5", sine_run(8u, (int16_t)(SMP_NSETS + 1), 72), 523.25);
     check("SLICE on USR1 (a sample), SAMPLE on PIANO: not the sine", !sine_run(SLC_ENG, 1, 60).sine &&
           !sine_run(4u, 0, 60).sine, 0);
     printf("slice: %s\n", fails ? "FAILED" : "all checks ok");

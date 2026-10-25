@@ -10,7 +10,7 @@
  *   KNOB 3  SPLIT  picked (right): OCT+ splits the slice at its middle (up to 32 slices)
  *   KNOB 4  JOIN   picked (right): OCT+ joins the slice to the one before (its start goes)
  *   OCT-    drops the pick, or (none) goes HOME
- * Edits are for a user slot (USR1..3: SRC); BREAK and PIANO show their slices only, a source with no material (it
+ * Edits are for a user slot (USR1..2: SRC); BREAK and PIANO show their slices only, a source with no material (it
  * plays a sine) says SAMPLE NOT FOUND (the no-file icon). The first edit takes
  * the slices shown into the slot's MAN table (eng_slice.c) and sets DIV to MAN; later edits change that table (the
  * audio side switches tables between notes). Leaving the page saves them with the sample (slice_store.c, once
@@ -83,8 +83,8 @@ static slc_man_t *slice_edit_begin(uint32_t *k)
     const slc_src_t *s = slice_src(&src, &div);
     slc_man_t *m;
     if (!s || !src || src == SLC_SRC_PIANO) {
-        static const char *const EMPTY[3] = {"USR1 EMPTY", "USR2 EMPTY", "USR3 EMPTY"};
-        ui_message(src && src != SLC_SRC_PIANO ? EMPTY[src - 1u] : "SRC USR1-3 TO EDIT");
+        static const char *const EMPTY[2] = {"USR1 EMPTY", "USR2 EMPTY"};
+        ui_message(src && src != SLC_SRC_PIANO ? EMPTY[src - 1u] : "SRC USR1-2 TO EDIT");
         return 0;
     }
     *k = src - 1u;

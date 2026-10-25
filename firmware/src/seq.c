@@ -72,8 +72,8 @@ static uint32_t trk_midi_ch(uint32_t i)
     int32_t b = midi_base();
     if (b == -2)
         return mch_get(i) < 16u ? mch_get(i) : i % NTRK;
-    return (b > 0 ? (uint32_t)b : 0u) + i % NTRK;
-}
+    return ((b > 0 ? (uint32_t)b : 0u) + i % NTRK) & 15u;   /* (5-LAB: track 5 sends on the channel after the block's */
+}                                                          /* four; the blocks hear four channels: MIDI_BLOCK) */
 
 static int drum_track(const track_t *t) { return ENGINES[eng_idx(t->eng_req)] == &ENG_DRUM; }
 
@@ -1195,12 +1195,14 @@ static void seq_tick(track_t *t, uint32_t n)
 static uint8_t midi_route;                 /* the G_ROUTE events_block last saw (a change to a block: midi_route_block;
                                             * MIDI_ROUTE_AGAIN: TRACK's channels changed, the same again) */
 #define MIDI_ROUTE_AGAIN 0xFFu
+#define MIDI_BLOCK 4u                      /* the channels a block (CH1-4 .. CH13-16) hears: tracks 1..4; track 5 is the */
+                                           /* selected track (SEL) or has a channel of its own (TRACK) */
 static int32_t midi_slot(uint32_t ch)      /* the track channel ch plays, -1 none (and with SEL) */
 {
     int32_t b = midi_base(), omni = -1;
     uint32_t i;
     if (b != -2)
-        return b >= 0 && ch - (uint32_t)b < NPART ? (int32_t)(ch - (uint32_t)b) : -1;
+        return b >= 0 && ch - (uint32_t)b < MIDI_BLOCK ? (int32_t)(ch - (uint32_t)b) : -1;
     for (i = 0; i < NPART; i++) {
         uint32_t c = mch_get(i);
         if (c == ch)

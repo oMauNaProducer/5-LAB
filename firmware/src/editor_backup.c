@@ -7,14 +7,18 @@
  * Id 8 (the FM6 patch bank of 1.0..1.0.2) is listed empty since 1.0.3; a PUT of it from an older archive moves its
  * patches into the user presets restored before it (ids 6, 7), as the first boot after the update does (up_fm6.c).
  * Id 9 is the user presets' FM6 patches (up_fm6.c), appended in 1.0.3.
+ * 5-LAB: ids 10 (the music as it is) and 11..14 (slots A..D) are the fifth track's half of ids 0 and 2..5 (project.c
+ * PROJ5: 1280 bytes, or none); a restore puts a half after its project, and a half names the project it belongs to
+ * (its link): one that is not the project restored before it is refused. The user samples are ids 32 and 33 (no USR3).
  */
-static const uint8_t ED_BK_IDS[13] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 32, 33, 34};
+static const uint8_t ED_BK_IDS[17] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 32, 33};
 #define ED_BK_N ((uint32_t)sizeof ED_BK_IDS)
 #define ED_BK_MAX ((uint32_t)sizeof proj_wire_u.raw)
 #define ED_BK_RAW (proj_wire_u.raw)  /* reuse the existing serialized main-loop scratch */
 _Static_assert(sizeof proj_wire_u.raw >= sizeof(upf_t) && sizeof proj_wire_u.raw >= sizeof(fm6_bank_t), "backup staging");
 static persist_t ed_bk_settings __attribute__((section(".pool")));
 static uint8_t ed_bk_valid, ed_bk_put, ed_bk_id, ed_bk_gen;
+static uint32_t ed_bk_len5, ed_bk_link0;    /* 5-LAB: the runtime half's length (0: none); the link of the project restored last */
 static uint32_t ed_bk_len, ed_bk_crc, ed_bk_pos, ed_bk_ms, ed_bk_usb;
 static void ed_bk_u32(uint32_t n) { for (uint32_t i = 0; i < 5u; i++) ed_b((n >> (i * 7u)) & 127u); }
 static uint32_t ed_bk_r32(const uint8_t *p)
@@ -50,6 +54,13 @@ static const uint8_t *ed_bk_object(uint32_t id, uint32_t *len)
         if (upf_valid(&upf)) *len = sizeof upf;
         return (const uint8_t *)&upf;
     }
+    if (id == 10u) { *len = ed_bk_len5; return (const uint8_t *)&proj_wire5; }   /* (captured with id 0) */
+    if (id >= 11u && id <= 14u) {
+        const proj5_store_t *c = &proj_slot5[id - 11u];
+        if (project_used(id - 11u) && ((const uint32_t *)c->raw)[0] == PROJ5_MAGIC &&
+            ((const uint32_t *)c->raw)[2] == proj_link(&proj_slot[id - 11u])) *len = PROJ5_SIZE;
+        return (const uint8_t *)c;
+    }
     if (id >= 32u && id < 32u + SMP_USER_SLOTS) {
         uint32_t k = id - 32u;
         const smp_user_hdr_t *h = (const smp_user_hdr_t *)smp_user_xip(k);
@@ -63,7 +74,8 @@ static uint32_t ed_bk_capture(void)
 {
     if (ed_flash_stop()) return 3;
     project_capture(&proj_scratch);
-    if (!proj_pack((project_store_t *)ED_BK_RAW, &proj_scratch)) return 2;
+    if (!proj_pack_pair((project_store_t *)ED_BK_RAW, &proj_wire5, &proj_scratch)) return 2;
+    ed_bk_len5 = PROJ5_SIZE;
     ed_bk_gen = ++proj_wire_gen;
 #if FELUCCA_FLASH
     ed_bk_settings = persist_saved;                 /* fields absent from this build survive */
@@ -95,6 +107,7 @@ static uint32_t ed_bk_commit(void)
     if (ed_bk_pos != ed_bk_len || st_crc32(raw, ed_bk_len) != ed_bk_crc) return 2;
     if (ed_bk_id == 0u || (ed_bk_id >= 2u && ed_bk_id <= 5u)) {
         if (ed_bk_len && !proj_import(&proj_scratch, raw, (int)ed_bk_len)) return 2;
+        ed_bk_link0 = ed_bk_len == PROJ_STORE_SIZE ? proj_link(raw) : 0u;   /* (the halves that follow name this) */
         if (ed_bk_len) {                            /* an older format becomes FUN10 inside its ranges */
             proj_bound(&proj_scratch);
             if (!proj_pack((project_store_t *)raw, &proj_scratch)) return 2;
@@ -105,6 +118,18 @@ static uint32_t ed_bk_commit(void)
             return project_restore_runtime(&proj_scratch) ? 2u : 0u;
         }
         obj = OBJ_PROJECT0 + ed_bk_id - 2u;
+    } else if (ed_bk_id == 10u) {                   /* 5-LAB: the fifth track's half of the music restored with id 0 */
+        if (!ed_bk_len) return 0;                   /* (none: the track stays at its power-on sound) */
+        if (ed_bk_len != PROJ5_SIZE) return 2;
+        project_capture(&proj_scratch);
+        if (!proj_unpack5(&proj_scratch, raw, ed_bk_link0)) return 2;
+        proj_bound(&proj_scratch);
+        return project_restore_runtime(&proj_scratch) ? 2u : 0u;
+    } else if (ed_bk_id >= 11u && ed_bk_id <= 14u) {   /* .. and of a slot's: it must name the FUN10 now there */
+        if (ed_bk_len && (ed_bk_len != PROJ5_SIZE || ((const uint32_t *)raw)[0] != PROJ5_MAGIC ||
+                          ((const uint32_t *)raw)[2] != proj_link(&proj_slot[ed_bk_id - 11u]) ||
+                          ((const uint32_t *)raw)[PROJ5_SIZE / 4u - 1u] != proj_hash(raw, PROJ5_SIZE - 4u))) return 2;
+        obj = OBJ_PROJ5_0 + ed_bk_id - 11u;
     } else if (ed_bk_id == 1u) {
         const persist_t *p = (const persist_t *)raw;
         if (ed_bk_len != sizeof *p || p->magic != PERSIST_MAGIC || !palette_stored_ok(p->palette) ||
@@ -136,9 +161,13 @@ static uint32_t ed_bk_commit(void)
 #endif
     if (ed_bk_id >= 2u && ed_bk_id <= 5u) {
         memset(&proj_slot[ed_bk_id - 2u], 0, sizeof proj_slot[0]);
+        memset(&proj_slot5[ed_bk_id - 2u], 0, sizeof proj_slot5[0]);   /* (its half follows: ids 11..14) */
         if (proj_cur == ed_bk_id - 2u)
             proj_cur = PROJ_NO_SLOT;                     /* (another project there now: the music keeps its name) */
         if (ed_bk_len) memcpy(&proj_slot[ed_bk_id - 2u], raw, ed_bk_len);
+    } else if (ed_bk_id >= 11u && ed_bk_id <= 14u) {
+        memset(&proj_slot5[ed_bk_id - 11u], 0, sizeof proj_slot5[0]);
+        if (ed_bk_len) memcpy(&proj_slot5[ed_bk_id - 11u], raw, ed_bk_len);
     } else if (ed_bk_id == 1u) {
         memcpy(&ed_bk_settings, raw, sizeof ed_bk_settings);
         settings_import(&ed_bk_settings, sizeof ed_bk_settings);
@@ -163,7 +192,7 @@ static int proj_store_len(uint32_t len)
 static uint32_t ed_bk_write(const uint8_t *a, uint32_t n)
 {
     /* the arguments first: a malformed request never stops the transport */
-    if (n < 2u || a[0] > 3u || a[1] > 9u) return 1;
+    if (n < 2u || a[0] > 3u || a[1] > 14u) return 1;
     if (a[0] == 0u) {
         if (n != 12u || a[6] > 15u || a[11] > 15u) return 1;
         uint32_t len = ed_bk_r32(a + 2);
@@ -171,7 +200,8 @@ static uint32_t ed_bk_write(const uint8_t *a, uint32_t n)
             (a[1] == 1u && len != sizeof(persist_t)) ||
             (a[1] >= 2u && a[1] <= 5u && len && !proj_store_len(len)) ||
             ((a[1] == 6u || a[1] == 7u) && len && len != sizeof(up_bank_t)) ||
-            (a[1] == 8u && len && len != sizeof(fm6_bank_t)) || (a[1] == 9u && len && len != sizeof(upf_t))) return 1;
+            (a[1] == 8u && len && len != sizeof(fm6_bank_t)) || (a[1] == 9u && len && len != sizeof(upf_t)) ||
+            (a[1] >= 10u && len && len != PROJ5_SIZE)) return 1;
         if (ed_flash_stop()) return 3;
         ed_bk_valid = 0; ed_bk_put = 1; ed_bk_id = a[1]; ed_bk_len = len; ed_bk_gen = ++proj_wire_gen;
         ed_bk_crc = ed_bk_r32(a + 7); ed_bk_pos = 0;
@@ -213,7 +243,7 @@ static int ed_backup_handle(uint32_t cmd, const uint8_t *a, uint32_t n)
         uint32_t len = 0, off = n >= 6u ? ed_bk_r32(a + 1) : 0u;
         uint32_t count = n == 8u ? (uint32_t)a[6] | (uint32_t)a[7] << 7 : 0u;
         const uint8_t *p = n ? ed_bk_object(a[0], &len) : 0;
-        uint32_t rc = (!ed_bk_valid || ed_bk_usb != usb.resets || (n && !a[0] && ed_bk_gen != proj_wire_gen)) ? 5u : transport_busy() ? 3u :
+        uint32_t rc = (!ed_bk_valid || ed_bk_usb != usb.resets || (n && (!a[0] || a[0] == 10u) && ed_bk_gen != proj_wire_gen)) ? 5u : transport_busy() ? 3u :
             n != 8u || a[5] > 15u || !p || !count || count > 256u || off > len || count > len - off ? 1u : 0u;
         ed_b(n ? a[0] : 127u); ed_b(rc); ed_bk_u32(off); ed_b(rc ? 0u : count & 127u); ed_b(rc ? 0u : count >> 7);
         if (!rc) ed_bk_pack(p + off, count);

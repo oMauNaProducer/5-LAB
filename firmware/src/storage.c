@@ -18,7 +18,8 @@
 #define ST_PAYLOAD_MAX (ST_SECTOR - ST_PAYLOAD_OFF)
 
 /* flash map (FL_DATA 0x97000..0xDFFFF, FL_GLOB 0xFC000.., FL_AUTO 0xE5000..0xE6FFF, FL_VBANK 0xE7000): settings 0xFC000, projects
- * 0x97000..0x9EFFF, user sample slots 0xA0000..0xDBFFF (eng_sample.c), user preset banks 0xDC000..0xDFFFF (upreset.c),
+ * 0x97000..0x9EFFF, user sample slots 0xA0000..0xC7FFF (eng_sample.c: two since 5-LAB; the third's flash, 0xC8000..0xD1FFF,
+ * holds the fifth tracks' half of the four projects and of the autosave: OBJ_PROJ5_0 .. OBJ_AUTOSAVE5), user preset banks 0xDC000..0xDFFFF (upreset.c),
  * the user presets' FM6 patches (up_fm6.c, since 1.0.3): copy A 0x9F000, copy B 0xFE000; the autosave (project.c,
  * 1.2): A 0xE5000, B 0xE6000, above the OTA staging (0xE0000..0xE4FFF), in the margin the stock firmware's own update
  * stages into (only ever while the stock firmware runs: a later Felucca finds no valid copy and starts as without one).
@@ -29,7 +30,9 @@
  * The FM6 voice bank (1.4.1, fm6_vbank.c): 0xE7000, the sector above the autosave, with a commit record of the same
  * kind (type OBJ_FM6VB, not an st_load object); a new bank is first staged in the autosave's older copy (fm6_vbank.c). */
 enum { OBJ_SETTINGS, OBJ_PROJECT0, OBJ_UPRESET0 = OBJ_PROJECT0 + 4, OBJ_FM6BANK = OBJ_UPRESET0 + 2, OBJ_UPFM6,
-       OBJ_AUTOSAVE, OBJ_COUNT };
+       OBJ_AUTOSAVE,
+       OBJ_PROJ5_0, OBJ_AUTOSAVE5 = OBJ_PROJ5_0 + 4, OBJ_COUNT };   /* 5-LAB: the fifth track's half of each project and of the
+                                                                    * autosave (project.c PROJ5), 0xC8000.. (was USR3) */
 #define OBJ_FM6VB 32u                          /* the voice bank's commit records (fm6_vbank.c; >= OBJ_COUNT: st_load
                                                 * never takes one, no object here takes its sectors) */
 
@@ -69,6 +72,8 @@ static uint32_t st_sector(uint32_t obj, uint32_t copy)  /* flash offset of copy 
         return copy ? 0xFE000u : 0x9F000u;
     if (obj == OBJ_AUTOSAVE)
         return 0xE5000u + copy * ST_SECTOR;
+    if (obj >= OBJ_PROJ5_0)                              /* (5-LAB: USR3's flash, 0xC8000..0xD1FFF: 5 objects, A/B) */
+        return 0xC8000u + (obj - OBJ_PROJ5_0) * 2u * ST_SECTOR + copy * ST_SECTOR;
     if (obj >= OBJ_UPRESET0)
         return 0xDC000u + (obj - OBJ_UPRESET0) * 2u * ST_SECTOR + copy * ST_SECTOR;
     return 0x97000u + (obj - OBJ_PROJECT0) * 2u * ST_SECTOR + copy * ST_SECTOR;
@@ -126,6 +131,21 @@ static int st_load(uint32_t obj, void *dst, uint32_t max)
     uint32_t i;
     st_hdr_t h;
     if (obj >= OBJ_COUNT || st_current(obj, &h) < 0 || h.len > max)
+        return -1;
+    for (i = 0; i < h.len; i++)
+        ((uint8_t *)dst)[i] = st_buf[i];
+    return (int)h.len;
+}
+
+/* load the copy BEFORE the current one (the older valid one) into dst: its length, or -1 (5-LAB: a project's half whose
+ * newer copy names a FUN10 that was never written, project.c proj_half_load) */
+static int st_load_prev(uint32_t obj, void *dst, uint32_t max)
+{
+    uint32_t i;
+    st_hdr_t h;
+    int cur;
+    if (obj >= OBJ_COUNT || (cur = st_current(obj, &h)) < 0 || st_head(obj, (uint32_t)(cur ^ 1), &h) != 0 ||
+        st_body(obj, (uint32_t)(cur ^ 1), &h) != 0 || h.len > max)
         return -1;
     for (i = 0; i < h.len; i++)
         ((uint8_t *)dst)[i] = st_buf[i];

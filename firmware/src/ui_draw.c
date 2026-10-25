@@ -966,10 +966,7 @@ static void draw_columns(void)
             param_format(d, *vp, val, &unit);
             card_mot_of(vp);
             card_span_of(d);
-            if (home_levels())                         /* 1.5: T1..T4 LEVEL, the track's cushion, muted: DIM */
-                draw_column(c, "LEVEL", val, unit, trk[c].p[P_MUTE] ? T_DIM : VAL(c), RATIO(d, *vp), trk_icon(c, 1));
-            else
-                draw_column(c, d->label, val, unit, VAL(c), RATIO(d, enum_rank(d, *vp)), param_icon(d, *vp));
+            draw_column(c, d->label, val, unit, VAL(c), RATIO(d, enum_rank(d, *vp)), param_icon(d, *vp));
         }
         return;
     }
@@ -1337,7 +1334,7 @@ static void draw_columns(void)
 #define SPL_X0 ((240u - SPL_SQ) / 2u)               /* its top-left on the screen (x and y) */
 #define SPL_PAD 16                                  /* the text's inset: left (its ink), top and bottom (the capitals) */
 #define SPL_PITCH 20                                /* line to line */
-static const char *const SPLASH_LINES[] = {"LAB-4T", FELUCCA_VERSION, "fork of Felucca", "H\xFCgelton Instruments"};
+static const char *const SPLASH_LINES[] = {"5-LAB", FELUCCA_VERSION, "fork of Felucca", "H\xFCgelton Instruments"};
 /* a band of two lines, h tall, at y on the screen: the first line's top at ly; the two lines' capitals declared
  * against al0..al1 (mode: AL_V the band centred there, AL_B the last baseline on al1) */
 static void splash_band(uint32_t y, uint32_t h, int32_t ly, const char *const *l, uint32_t mode, int32_t al0,
