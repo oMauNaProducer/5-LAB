@@ -772,7 +772,7 @@ enum { S_HOME, S_HOME_IDLE, S_MESSAGE, S_MESSAGE_KEY, S_MESSAGE_NOFILE, S_PRESET
        S_DETAIL, S_DETAIL_PLAYING, S_DETAIL_REST, S_DETAIL_DRUM, S_ROLL_MARKS, S_DRUM_MARKS, S_HELP_DETAIL,
        S_DETAIL_COND, S_DETAIL_FILL, S_AUTO_COND, S_GLO_FILL, S_SEQ_EUCLID, S_SEQ_EUCLID_DRUM, S_SEQ_EUCLID_64,
        S_MENU_SELECT, S_PROJECT_ERASE, S_CONFIRM_ERASE_PROJ, S_TOOLS_CLEAN, S_CONFIRM_CLEAN,
-       S_MENU_MIDI_TRACK, S_MENU_MIDI_TCH_UNUSED, S_MENU_MIDI_AUTO, S_HOME_TRACKS_MIDI, S_MIXER_MIDI, S_EDIT_PHASE_FOLD, S_AUTO_REC, S_AUTO_RAMP, S_ROLL_NUDGE, S_ROLL_NUDGE_QNT, S_COUNT };
+       S_MENU_MIDI_TRACK, S_MENU_MIDI_TCH_UNUSED, S_MENU_MIDI_AUTO, S_HOME_TRACKS_MIDI, S_MIXER_MIDI, S_EDIT_PHASE_FOLD, S_AUTO_REC, S_AUTO_RAMP, S_ROLL_NUDGE, S_ROLL_NUDGE_QNT, S_ROLL_NUDGE_NEAR, S_COUNT };
 static const char *const S_NAME[S_COUNT] = {"home", "home_idle", "message", "message_key", "message_nofile", "presets", "presets_nofav", "user",
     "phrases", "project", "tools", "song_empty", "song", "step", "auto_steps", "auto_add_chance", "automation", "drum",
     "drum_hand", "drum_cym", "mixer", "mixer_from_home", "mixer_pan", "env", "env_dest", "lfo", "mod", "fx", "slicer", "dly", "scl", "chord", "chord_wide", "chord_off", "chord_kit", "arp",
@@ -803,7 +803,7 @@ static const char *const S_NAME[S_COUNT] = {"home", "home_idle", "message", "mes
     "detail_cond", "detail_fill", "auto_cond", "layer_glo_fill", "layer_seq_euclid", "layer_seq_euclid_drum",
     "layer_seq_euclid_64",
     "menu_select", "project_erase", "confirm_erase_project", "tools_clean", "confirm_clean",
-    "menu_midi_track", "menu_midi_channels_unused", "menu_midi_auto_select", "home_tracks_midi", "mixer_midi", "edit_phase_fold", "auto_rec", "auto_ramp", "roll_nudge", "roll_nudge_quantized"};
+    "menu_midi_track", "menu_midi_channels_unused", "menu_midi_auto_select", "home_tracks_midi", "mixer_midi", "edit_phase_fold", "auto_rec", "auto_ramp", "roll_nudge", "roll_nudge_quantized", "roll_nudge_near"};
 
 /* the STEP page's piano roll (ui_graph.c graph_roll) on track 1, stopped unless said: an empty pattern; ACID in
  * A minor; POLY chords (Am7 F C G, tied); a line with ties, slides and accents in C major; LEN 32 on its second
@@ -1602,6 +1602,22 @@ static void setup(int s)
         go_page(GR_EVENTS); (void)auto_pick(EVC(EVK_RMP, 0)); ui.hot_col = 3; ui.hot_t = 30;
         break;
     case S_ROLL_NUDGE:                                   /* 5-LAB 1.0.6: QUANTIZE OFF, bars drawn where they play (NUDGE -8 .. +7) */
+    case S_ROLL_NUDGE_NEAR: {                            /* 1.0.7: the same note twice, the first late and the next early (a space kept), then a slide
+                                                          * between notes nudged the other way, a chord, and a note then another one near */
+        uint32_t i;
+        track_defaults_steps(TSEL);
+        for (i = 0; i < 16u; i++) { TSEL->step[i].time = ST_REST; TSEL->step[i].n = 0; }
+        TSEL->step[0].note[0] = 60; TSEL->step[1].note[0] = 60; step_set_nudge(&TSEL->step[0], 4); step_set_nudge(&TSEL->step[1], -5);
+        TSEL->step[3].note[0] = 62; TSEL->step[4].note[0] = 67; TSEL->step[3].flags |= SF_SLIDE; step_set_nudge(&TSEL->step[3], 6); step_set_nudge(&TSEL->step[4], -6);
+        TSEL->step[6].note[0] = 60; TSEL->step[6].note[1] = 64; TSEL->step[6].n = 2; step_set_nudge(&TSEL->step[6], 7);
+        TSEL->step[7].note[0] = 64; TSEL->step[7].note[1] = 71; TSEL->step[7].n = 2; step_set_nudge(&TSEL->step[7], -8);
+        TSEL->step[9].note[0] = 65; TSEL->step[10].note[0] = 70; step_set_nudge(&TSEL->step[9], 2); step_set_nudge(&TSEL->step[10], -3); TSEL->step[11].note[0] = 65; TSEL->step[11].n = 1; TSEL->step[11].time = ST_NOTE; TSEL->step[11].vel = 99; TSEL->step[12].note[0] = 65; TSEL->step[12].n = 1; TSEL->step[12].time = ST_NOTE; TSEL->step[12].vel = 99; step_set_nudge(&TSEL->step[11], 7); step_set_nudge(&TSEL->step[12], -8);
+        for (i = 0; i < 16u; i++) if (i != 2 && i != 5 && i != 8 && (i < 11u)) { if (TSEL->step[i].note[0] && !TSEL->step[i].n) TSEL->step[i].n = 1; }
+        for (i = 0; i < 11u; i++) if (TSEL->step[i].n) { TSEL->step[i].time = ST_NOTE; TSEL->step[i].vel = 99; }
+        TSEL->p[P_SLEN] = 16; TSEL->p[P_SQNT] = 0; ui.cursor = 12;
+        go_page(GR_ROLL);
+        break;
+    }
     case S_ROLL_NUDGE_QNT: {                             /* .. and QUANTIZE ON: the same steps on their columns */
         uint32_t i;
         track_defaults_steps(TSEL);

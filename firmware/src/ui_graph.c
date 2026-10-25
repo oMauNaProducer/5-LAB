@@ -169,12 +169,29 @@ static void pr_split(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t c, uin
 }
 /* the bars of step s in column x (in its RATCH parts, hits; a TIE's carried bars: 1): a 1 px edge mark for a note
  * out of view; first: row y of the step's first note */
-static void pr_bars(const step_t *st, int32_t x, int32_t w, uint16_t c, int acc_all, int32_t *first, uint32_t hits)
+#define PR_GAP 2                                    /* 5-LAB 1.0.7: the space kept between a bar and the next one of the same note */
+/* the width of a bar of note n at x, w wide, when the next step's bar (ns, from nx on; ns 0: none) is nudged near it: it ends
+ * PR_GAP before it (at least 1 px) if that step has the same note; another note, no change */
+static int32_t pr_bar_w(const step_t *ns, int32_t nx, int32_t n, int32_t x, int32_t w)
+{
+    uint32_t j;
+    int32_t e;
+    if (!ns || nx - PR_GAP >= x + w)
+        return w;
+    for (j = 0; j < 4u + NLANE; j++)
+        if (pr_note(ns, j) == n) {
+            e = nx - PR_GAP - x;
+            return e < 1 ? 1 : e;
+        }
+    return w;
+}
+static void pr_bars(const step_t *st, int32_t x, int32_t w, uint16_t c, int acc_all, int32_t *first, uint32_t hits,
+                    const step_t *ns, int32_t nx)
 {
     uint32_t j;
     int32_t ybot = PR_Y0 + PR_ROWS * PR_RH;
     for (j = 0; j < 4u + NLANE; j++) {
-        int32_t n = pr_note(st, j), y;
+        int32_t n = pr_note(st, j), y, bw = hits == 1u ? pr_bar_w(ns, nx, n, x, w) : w;
         int acc;
         if (n < 0)
             continue;
@@ -183,13 +200,13 @@ static void pr_bars(const step_t *st, int32_t x, int32_t w, uint16_t c, int acc_
         if (*first < -1000)
             *first = y;
         if (y < PR_Y0)
-            pr_split(x, PR_Y0, w, 1, c, hits);
+            pr_split(x, PR_Y0, bw, 1, c, hits);
         else if (y >= ybot)
-            pr_split(x, ybot - 1, w, 1, c, hits);
+            pr_split(x, ybot - 1, bw, 1, c, hits);
         else if (acc)
-            pr_split(x, y, w, PR_RH, c == T_ACCENT ? c : T_TEXT, hits);
+            pr_split(x, y, bw, PR_RH, c == T_ACCENT ? c : T_TEXT, hits);
         else
-            pr_split(x, y + 1, w, PR_RH - 2, c, hits);
+            pr_split(x, y + 1, bw, PR_RH - 2, c, hits);
     }
 }
 /* 5-LAB 1.0.6: the bar of a step that plays off its start (QUANTIZE OFF, a NUDGE: seq_nudge) is drawn where it plays: x moved by
@@ -257,14 +274,25 @@ static void graph_roll(const track_t *t, uint16_t c)
             continue;                                 /* a REST, empty, or a TIE after one */
         st = &seq_steps(t)[s];
         col = s == ui.cursor || si == ui.cursor ? T_ACCENT : c;
-        if (s == si)
-            pr_bars(st, pr_nudge_x(t, st, x + 2, 9, ncol), 9, col, (st->flags & SF_ACCENT) != 0u, &y, step_ratchet(st));
-        else                                          /* a TIE: the bars on through the gap before */
-            pr_bars(st, x - 1, 12, col, (st->flags & SF_ACCENT) != 0u, &y, 1u);
-        if ((st->flags & SF_SLIDE) && step_ratchet(st) == 1u &&   /* (a ratcheted step never slides out) */
-            ns->time == ST_NOTE && ns->n && y >= PR_Y0 && y < ybot) {
-            int32_t ny = clamp(pr_row_y(ns->note[0]), PR_Y0, ybot - PR_RH);
-            cv_line(x + 10, y + 2, x + 14, ny + 2, T_TEXT);   /* the slide into the next note */
+        {   /* 1.0.7: where the next column's own bar starts (nudged), for the space before it and the slide into it */
+            int32_t bx = x + 2, nbx = 0, nxx = x + PR_CW + 2;
+            const step_t *nb = 0;
+            if (i + 1u < ncol && pr_src(t, nx, len) == nx) {
+                nb = &seq_steps(t)[nx];
+                nbx = pr_nudge_x(t, nb, nxx, 9, ncol);
+            }
+            if (s == si) {
+                bx = pr_nudge_x(t, st, x + 2, 9, ncol);
+                pr_bars(st, bx, 9, col, (st->flags & SF_ACCENT) != 0u, &y, step_ratchet(st), nb, nbx);
+            } else                                    /* a TIE: the bars on through the gap before */
+                pr_bars(st, x - 1, 12, col, (st->flags & SF_ACCENT) != 0u, &y, 1u, 0, 0);
+            if ((st->flags & SF_SLIDE) && step_ratchet(st) == 1u &&   /* (a ratcheted step never slides out) */
+                ns->time == ST_NOTE && ns->n && y >= PR_Y0 && y < ybot) {
+                int32_t ny = clamp(pr_row_y(ns->note[0]), PR_Y0, ybot - PR_RH);
+                int32_t ex = s == si ? bx + pr_bar_w(nb, nbx, pr_note(st, 0), bx, 9) - 1 : x + 10;   /* the end of this bar .. */
+                int32_t sx = nb ? nbx : x + 14;                                                   /* .. to the start of the next */
+                cv_line(ex, y + 2, sx < ex ? ex : sx, ny + 2, T_TEXT);   /* the slide into the next note */
+            }
         }
     }
 }

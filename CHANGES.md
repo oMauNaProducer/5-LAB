@@ -1,11 +1,21 @@
 # 5-LAB: changes from Felucca 1.6.1
 
 5-LAB is a fork of [Felucca](https://github.com/hugelton/Felucca) 1.6.1 by Leo Kuroshita (Hügelton Instruments), GPL-3.0-only like the
-original. **Version 1.0.6** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
+original. **Version 1.0.7** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
 Five audio tracks, every engine on all five; the lab is for trying things out.
 
 Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything not listed here is Felucca 1.6.1 as it was
 (the sound is the same: the 98 golden renders of `tests/golden.txt` are unchanged).
+
+## 1.0.7: the piano roll keeps a space between nudged notes and the slide joins their ends
+
+- **Space.** With QUANTIZE OFF, a bar whose next step has the **same note** ends 2 px before the next bar starts (at least 1 px), so a late note and an
+  early one after it are two bars, not one. A different note is not shortened (it does not touch). With QUANTIZE ON nothing changes (the bars
+  already have 3 px between them). Two notes played less than 3 px (about a sixteenth of a step) apart leave a 1 px bar: there is no room for the space.
+- **Slide.** The line of a slide goes from the end of its bar to the start of the next step's bar as they are drawn now (nudged), not from where
+  they would be with QUANTIZE ON.
+- Not changed: RATCH steps, a TIE's carried bars, the DRUM grid; no change to the sound, the project, the flash or the RAM.
+- Tests: `tests/nudge_roll_test.c` (the width for the same note near / far, another note, a chord, the 1 px floor); a new render `roll_nudge_near`.
 
 ## 1.0.6: the piano roll shows a NUDGE where it plays
 

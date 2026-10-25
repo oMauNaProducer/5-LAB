@@ -59,8 +59,24 @@ static int roll_nudge(void)
     bad += check("  a REST has no bar to move", pr_nudge_x(t, &t->step[3], x0, 9, 16) == x0);
     return bad;
 }
+static int roll_space(void)
+{
+    int bad = 0;
+    step_t a, b;
+    memset(&a, 0, sizeof a); memset(&b, 0, sizeof b);
+    a.note[0] = 60; a.n = 1; a.time = ST_NOTE;
+    b.note[0] = 60; b.n = 1; b.time = ST_NOTE;
+    bad += check("roll: no next bar: the width as it was", pr_bar_w(0, 0, 60, 100, 9) == 9);
+    bad += check("  the next bar of the same note far away: 9", pr_bar_w(&b, 114, 60, 100, 9) == 9);
+    bad += check("  the same note close: the bar ends PR_GAP before the next one", pr_bar_w(&b, 108, 60, 100, 9) == 108 - PR_GAP - 100 &&
+                 100 + pr_bar_w(&b, 108, 60, 100, 9) + PR_GAP == 108);
+    bad += check("  another note: not shortened (it does not touch)", pr_bar_w(&b, 108, 72, 100, 9) == 9);
+    bad += check("  a chord: only the note the next step also has", (b.note[1] = 64, b.n = 2, pr_bar_w(&b, 108, 64, 100, 9) == 6 && pr_bar_w(&b, 108, 67, 100, 9) == 9));
+    bad += check("  never under 1 px, the next bar at or before it", pr_bar_w(&b, 101, 60, 100, 9) == 1 && pr_bar_w(&b, 95, 60, 100, 9) == 1);
+    return bad;
+}
 int main(void)
 {
-    int bad = roll_nudge();
+    int bad = roll_nudge() + roll_space();
     printf("%s\n", bad ? "ROLL NUDGE TEST FAILED" : "roll nudge tests passed"); return bad != 0;
 }
