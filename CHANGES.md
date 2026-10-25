@@ -1,11 +1,20 @@
 # 5-LAB: changes from Felucca 1.6.1
 
 5-LAB is a fork of [Felucca](https://github.com/hugelton/Felucca) 1.6.1 by Leo Kuroshita (Hügelton Instruments), GPL-3.0-only like the
-original. **Version 1.0.5** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
+original. **Version 1.0.6** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
 Five audio tracks, every engine on all five; the lab is for trying things out.
 
 Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything not listed here is Felucca 1.6.1 as it was
 (the sound is the same: the 98 golden renders of `tests/golden.txt` are unchanged).
+
+## 1.0.6: the piano roll shows a NUDGE where it plays
+
+- **What.** SEQ > STEP's piano roll draws the bar of a step that plays off its start (QUANTIZE OFF and a NUDGE, -8..+7 sixteenths of the step) moved
+  by it: 6 px early to 5 px late of the 12 px column, kept inside the grid. With QUANTIZE ON the bars sit on their columns, as they play, so turning
+  QUANTIZE on and off snaps the notes into the grid and releases them. The grid, the cursor, the playhead and the lock marks stay on the steps.
+- **Not moved.** A RATCH step (it plays on its start), a TIE's carried bars, a slide, a REST; the DRUM grid (a later version, if wanted).
+- No change to the sound, the project format, the flash or the RAM; one calculation per bar drawn.
+- Tests: new `tests/nudge_roll_test.c` (the shift for every NUDGE, the edges, QUANTIZE ON, RATCH, REST); two new renders, `roll_nudge` and `roll_nudge_quantized`.
 
 ## 1.0.5: three fixes in SEQ > AUTOMATION
 

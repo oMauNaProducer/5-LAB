@@ -192,6 +192,18 @@ static void pr_bars(const step_t *st, int32_t x, int32_t w, uint16_t c, int acc_
             pr_split(x, y + 1, w, PR_RH - 2, c, hits);
     }
 }
+/* 5-LAB 1.0.6: the bar of a step that plays off its start (QUANTIZE OFF, a NUDGE: seq_nudge) is drawn where it plays: x moved by
+ * the NUDGE in 1/16 of the column (-8..+7: -6..+5 px of the 12), kept inside the grid (its left edge not over the keyboard strip,
+ * its right not past the last column). QUANTIZE ON, no NUDGE, a RATCH step: x as it was */
+static int32_t pr_nudge_x(const track_t *t, const step_t *st, int32_t x, int32_t w, uint32_t ncol)
+{
+    int32_t n = seq_nudge(t, st), d, lo = PR_X0 + 1, hi = PR_X0 + (int32_t)ncol * PR_CW - w;
+    if (!n)
+        return x;
+    d = (n * PR_CW + (n < 0 ? -(int32_t)NUDGE_DIV / 2 : (int32_t)NUDGE_DIV / 2)) / (int32_t)NUDGE_DIV;
+    x += d;
+    return x < lo ? lo : x > hi ? hi : x;
+}
 static void graph_roll(const track_t *t, uint16_t c)
 {
     uint32_t i, len = (uint32_t)t->p[P_SLEN], base = ui.bank * 16u, ncol, mask = scale_mask(t), held = pr_held();
@@ -246,7 +258,7 @@ static void graph_roll(const track_t *t, uint16_t c)
         st = &seq_steps(t)[s];
         col = s == ui.cursor || si == ui.cursor ? T_ACCENT : c;
         if (s == si)
-            pr_bars(st, x + 2, 9, col, (st->flags & SF_ACCENT) != 0u, &y, step_ratchet(st));
+            pr_bars(st, pr_nudge_x(t, st, x + 2, 9, ncol), 9, col, (st->flags & SF_ACCENT) != 0u, &y, step_ratchet(st));
         else                                          /* a TIE: the bars on through the gap before */
             pr_bars(st, x - 1, 12, col, (st->flags & SF_ACCENT) != 0u, &y, 1u);
         if ((st->flags & SF_SLIDE) && step_ratchet(st) == 1u &&   /* (a ratcheted step never slides out) */
