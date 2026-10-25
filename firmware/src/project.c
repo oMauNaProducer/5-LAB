@@ -1317,6 +1317,7 @@ static int project_restore_runtime(const project_t *input)
     transport_req = 0;
     chain_config = p->chain;
     motion = p->motion;
+    motion_arm = 0;                                     /* (5-LAB 1.0.2: the automation recording starts disarmed) */
     memset(motion_active, 0, sizeof motion_active);
     motion_base_valid = 0;
     ui.song_row = 0;

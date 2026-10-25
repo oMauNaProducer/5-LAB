@@ -13,6 +13,10 @@ static int16_t motion_base[NTRK][P_COUNT];
 static uint32_t motion_active[NTRK][(P_COUNT + 31u) / 32u];
 static uint32_t motion_locked[NTRK][(P_COUNT + 31u) / 32u];   /* the ids a lock holds now (put back at the next step) */
 static uint8_t motion_base_valid, motion_full;
+/* 5-LAB 1.0.2: the automation recording is armed (SEQ > AUTOMATION, the REC row; ui_events.c). A knob turned, a MIDI CC or an
+ * editor edit becomes automation only while it is on (and REC is on, PLAY runs, the track is the selected one). Off at
+ * power-on and at every project load: never saved */
+static volatile uint8_t motion_arm;
 static uint32_t motion_guard(void)
 {
 #if defined(FM1_IRQ_TARGET)
@@ -220,7 +224,7 @@ static int motion_capture(track_t *t, uint32_t id, int16_t value)
 {
     uint32_t k = trk_index(t), idx, len, period, f;
     if (!motion_param(id)) return 0;
-    if (!rec_on(t) || t != TSEL) {
+    if (!motion_arm || !rec_on(t) || t != TSEL) {
         /* A live edit becomes a new base, even when an earlier motion value is
          * currently sounding. Subsequent recorded events can still override it. */
         f = motion_guard();

@@ -640,7 +640,7 @@ static int cc_map_test(void)
 
     /* AUTOMATION: the selected track armed and playing records the CC as a knob move; else it is the new base */
     midi_test_reset();
-    song.rec = 1; seq_start(); events_block(CTL);
+    song.rec = 1; motion_arm = 1; seq_start(); events_block(CTL);
     queued(0xB0, 74, 20, 1);
     bad += check("armed and playing: CC74 records a motion event of CUT on the selected track", motion.count == 1u &&
                  motion.event[0].param == P_E4 && motion.event[0].value == 20 && (motion.event[0].place >> 6) == 0u);
@@ -648,7 +648,7 @@ static int cc_map_test(void)
     bad += check("  another track (channel 2, not selected): not recorded", motion.count == 1u && trk[1].p[P_E2] != 0);
     seq_stop(); events_block(CTL);
     bad += check("  stopped: the patch's own CUT comes back", trk[0].p[P_E4] == ANALOG_PRESETS[trk[0].preset].e[4]);
-    song.rec = 0;
+    song.rec = 0; motion_arm = 0;
     queued(0xB0, 74, 77, 1);
     bad += check("not armed: the CC is the new value, no event", trk[0].p[P_E4] == 77 && motion.count == 1u);
     return bad;

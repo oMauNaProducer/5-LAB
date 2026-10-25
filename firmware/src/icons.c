@@ -263,7 +263,7 @@ static uint32_t engine_icon(const char *name)
 }
 
 /* MOTION: the knob and its trace; recording into it (REC armed on the selected track, playing): its REC form */
-static uint32_t motion_icon(void) { return rec_on(TSEL) ? ICON_X_MOTION_REC : ICON_X_MOTION; }
+static uint32_t motion_icon(void) { return motion_arm && rec_on(TSEL) ? ICON_X_MOTION_REC : ICON_X_MOTION; }
 
 /* the icon beside a page's title in the footer (the pages that have one of their own; else ICON_NONE) */
 static uint32_t page_icon(const page_t *pg)

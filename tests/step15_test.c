@@ -210,13 +210,13 @@ static int vel(void)
     t->step[20] = (step_t){{70}, 1, ST_NOTE, 0, 30};                     /* past LEN */
     memcpy(ref, t->step, sizeof ref);
     go_auto_top(); frame();
-    ok = ev_list(rw) == 3u;
+    ok = ev_list(rw) == 4u;
     go_auto_add(EV_VEL, 4); frame();
     ok &= str_eq(act_name(4), "SHOW");
     press(B_OCTUP);
     n = ev_list(rw);
-    ok &= msg_is("VEL SHOWN") && n == 7u && rw[2] == EVC(EVK_VEL, 0) && rw[3] == EVC(EVK_VEL, 4) &&
-          rw[5] == EVC(EVK_VEL, 12) && auto_cur() == EVC(EVK_VEL, 4) && !memcmp(t->step, ref, sizeof ref);
+    ok &= msg_is("VEL SHOWN") && n == 8u && rw[3] == EVC(EVK_VEL, 0) && rw[4] == EVC(EVK_VEL, 4) &&
+          rw[6] == EVC(EVK_VEL, 12) && auto_cur() == EVC(EVK_VEL, 4) && !memcmp(t->step, ref, sizeof ref);
     bad += check("AUTOMATION: no VEL rows; + ADD VEL OCT+ (SHOW): one per note step inside LEN, nothing changed", ok);
     turn(EN_K4, -10);
     ok = t->step[4].vel == 90u && same_but(t, ref, 4, 4);
@@ -243,12 +243,12 @@ static int vel(void)
     frame();
     ok = str_eq(act_name(4), "HIDE");
     press(B_OCTUP);
-    ok &= msg_is("VEL HIDDEN") && ev_list(rw) == 3u;
+    ok &= msg_is("VEL HIDDEN") && ev_list(rw) == 4u;
     press(B_OCTUP);
-    ok &= ev_list(rw) > 3u;
+    ok &= ev_list(rw) > 4u;
     go_home(); frame();
     go_auto_top(); frame();
-    ok &= ev_list(rw) == 3u;
+    ok &= ev_list(rw) == 4u;
     bad += check("  HIDE hides them; leaving the page too", ok);
     return bad;
 }

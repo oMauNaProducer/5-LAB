@@ -1494,6 +1494,14 @@ static void graph_events(void)
             cv_text_r(226, y + LIST_TY, &AF_M, b, sel ? T_INK : T_MID, bg);
             continue;
         }
+        if (c >> 8 == EVK_ARM) {                     /* REC ON / OFF (1.0.2): the automation recording armed */
+            GFX_HOOK_ALIGN(0, y, 0, y + 16, AL_V, "list row text centred up/down");
+            cv_text_on(14, y + LIST_TY, &AF_M, "REC", sel ? T_INK : T_MID, bg);
+            GFX_HOOK_ALIGN(0, y, 0, y + 16, AL_V, "list row text centred up/down");
+            cv_text_on(EV_SX, y + LIST_TY, &AF_M, motion_arm ? "ON" : "OFF",
+                       sel ? T_INK : motion_arm ? T_TEXT : T_DIM, bg);
+            continue;
+        }
         if (c >> 8 == EVK_QNT) {                     /* QUANTIZE ON / OFF (1.2), the steps nudged: "NUDGED 3" */
             char b[16];
             str_cpy(b, "NUDGED ", sizeof b);

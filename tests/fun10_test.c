@@ -400,7 +400,7 @@ static int nudge(void)
         step_t ref[NSTEP];
         uint32_t n;
         go_auto_top(); frame();
-        turn(EN_K1, 1);                                 /* PLAY -> QUANTIZE */
+        turn(EN_K1, 2);                                 /* PLAY -> REC -> QUANTIZE */
         ok = auto_cur() == EVC(EVK_QNT, 0) && t->p[P_SQNT] == 1;
         turn(EN_K4, -1);
         ok &= t->p[P_SQNT] == 0;
@@ -408,7 +408,7 @@ static int nudge(void)
         ok &= t->p[P_SQNT] == 1;
         press(B_OCTUP); press(B_EDIT);
         ok &= t->p[P_SQNT] == 1 && msg_is("NOTHING TO DELETE") && !act_ready() && str_eq(act_name(4), "--");
-        bad += check("AUTOMATION's QUANTIZE row (the second): KNOB 4 OFF / ON; OCT+ and EDIT nothing", ok);
+        bad += check("AUTOMATION's QUANTIZE row (the third): KNOB 4 OFF / ON; OCT+ and EDIT nothing", ok);
         memcpy(ref, t->step, sizeof ref);
         go_auto_add(EV_NUDGE, 3); frame();
         n = ev_list(rw);

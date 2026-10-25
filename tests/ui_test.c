@@ -2762,7 +2762,8 @@ static int test_page_cycles(void)
     memcpy(p0, TSEL->p, sizeof p0);
     go_auto_top(); frame();
     n0 = ev_list(rw);
-    ok = n0 == 3u && rw[0] == EVC(EVK_TOP, 0) && rw[1] == EVC(EVK_QNT, 0) && rw[2] == EVC(EVK_ADD, 0);
+    ok = n0 == 4u && rw[0] == EVC(EVK_TOP, 0) && rw[1] == EVC(EVK_ARM, 0) && rw[2] == EVC(EVK_QNT, 0) &&
+         rw[3] == EVC(EVK_ADD, 0);
     go_auto_add(EV_CHANCE, 3); frame();
     press(B_OCTUP);
     want = ref[3]; step_set_chance(&want, 50);
@@ -2785,7 +2786,7 @@ static int test_page_cycles(void)
     turn(EN_K4, 1000);                                  /* back at 100 %: the row stays while edited */
     ok = steps_but(TSEL, ref, 0xFFu, 0) && auto_cur() == EVC(EVK_CHANCE, 4);
     turn(EN_K1, -1);                                    /* (another row: it leaves the list) */
-    ok &= auto_cur() == EVC(EVK_QNT, 0) && ev_list(rw) == 3u;
+    ok &= auto_cur() == EVC(EVK_QNT, 0) && ev_list(rw) == 4u;
     bad += check("  at 100 % it stays listed while edited; another row picked: gone (nothing stored)", ok);
     memcpy(ref, TSEL->step, sizeof ref);
     go_auto_add(EV_RATCH, 6); frame();
@@ -2803,19 +2804,19 @@ static int test_page_cycles(void)
     want = ref[6]; step_set_ratchet(&want, 4);
     ok &= steps_but(TSEL, ref, 6, &want);
     bad += check("AUTOMATION RATCH: + ADD x2, KNOB 4 to x4, EDIT x1; each one undo (SAVE held), the step's flags only", ok);
-    {   /* the order: PLAY, QUANTIZE, then by step (CHANCE, RATCH, NUDGE, the records), + ADD; a lock on the same step
+    {   /* the order: PLAY, REC, QUANTIZE, then by step (CHANCE, RATCH, NUDGE, the records), + ADD; a lock on the same step
          * after them */
         go_auto_add(EV_CHANCE, 6); frame(); press(B_OCTUP);
         go_auto_add(EV_NUDGE, 6); frame(); press(B_OCTUP);
         motion_set_lock(TSEL, 6, P_ATK, 3);
         motion_set_lock(TSEL, 2, P_ATK, 5);
         n0 = ev_list(rw);
-        ok = n0 == 8u && rw[0] == EVC(EVK_TOP, 0) && rw[1] == EVC(EVK_QNT, 0) && rw[2] >> 8 == EVK_REC &&
-             rw[3] == EVC(EVK_CHANCE, 6) && rw[4] == EVC(EVK_RATCH, 6) && rw[5] == EVC(EVK_NUDGE, 6) &&
-             rw[6] >> 8 == EVK_REC && rw[7] == EVC(EVK_ADD, 0);
+        ok = n0 == 9u && rw[0] == EVC(EVK_TOP, 0) && rw[1] == EVC(EVK_ARM, 0) && rw[2] == EVC(EVK_QNT, 0) &&
+             rw[3] >> 8 == EVK_REC && rw[4] == EVC(EVK_CHANCE, 6) && rw[5] == EVC(EVK_RATCH, 6) &&
+             rw[6] == EVC(EVK_NUDGE, 6) && rw[7] >> 8 == EVK_REC && rw[8] == EVC(EVK_ADD, 0);
         go_auto_add(EV_CHANCE, 6); frame(); press(B_OCTUP);
         ok &= msg_is("ALREADY LISTED") && auto_cur() == EVC(EVK_CHANCE, 6);
-        bad += check("  the rows: PLAY, QUANTIZE, by step (CHANCE, RATCH, NUDGE, then its locks / events), + ADD; one there: "
+        bad += check("  the rows: PLAY, REC, QUANTIZE, by step (CHANCE, RATCH, NUDGE, then its locks / events), + ADD; one there: "
                      "ALREADY LISTED", ok);
         auto_pick(EVC(EVK_NUDGE, 6));
         press(B_EDIT);                                  /* (the NUDGE out again: the rest as before) */
@@ -2931,9 +2932,12 @@ static int test_product_ux(void)
     turn(EN_K4, 1000); ok &= step_chance(&TSEL->step[0]) == 100;
     bad += check("CHANCE controls clamp to 0..100 without changing adjacent steps", ok);
     ui_power_on(); song.rec = 1; seq_start(); go_home();
-    int16_t baseline = TSEL->p[P_E0]; turn(EN_K1, 1);
+    int16_t baseline;
+    turn(EN_K1, 1);                                      /* (1.0.2: REC and PLAY, but the automation REC row OFF: no record) */
+    bad += check("REC and PLAY with the automation REC row OFF: a sound knob records nothing", motion_count(TSEL) == 0 && !motion_arm);
+    baseline = TSEL->p[P_E0]; motion_arm = 1; turn(EN_K1, 1);
     bad += check("REC plus a sound knob records motion through the UI", motion_count(TSEL) == 1 && motion_enabled(TSEL));
-    press(B_PLAY); events_block(32);
+    press(B_PLAY); events_block(32); motion_arm = 0;
     bad += check("stopping returns the original sound after a recorded knob gesture", TSEL->p[P_E0] == baseline);
     go_auto_top(); turn(EN_K4, -1);
     bad += check("#93 the page is AUTOMATION (GR_EVENTS inside)", str_eq(cur_page()->title, "AUTOMATION"));
@@ -2956,10 +2960,10 @@ static int test_product_ux(void)
         uint32_t id = ENGINES[TSEL->eng_req]->knob[0];
         ui_power_on(); go_home(); frame();
         ok = !card_motion(0) && !card_motion(1);
-        song.rec = 1; seq_start(); go_home(); turn(EN_K1, 1); frame();
+        song.rec = 1; motion_arm = 1; seq_start(); go_home(); turn(EN_K1, 1); frame();
         ok &= card_motion(0) && !card_motion(1) && !card_motion(2) && !card_motion(3);
         bad += check("MOTION: a recorded knob marks its HOME card (and no other)", ok && motion_count(TSEL) == 1);
-        song.rec = 0; press(B_PLAY); events_block(32); frame();
+        song.rec = 0; motion_arm = 0; press(B_PLAY); events_block(32); frame();
         ok = card_motion(0);
         go_auto_top(); turn(EN_K4, -1); go_home(); frame();
         ok &= !card_motion(0) && motion_count(TSEL) == 1;

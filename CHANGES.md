@@ -1,11 +1,24 @@
 # 5-LAB: changes from Felucca 1.6.1
 
 5-LAB is a fork of [Felucca](https://github.com/hugelton/Felucca) 1.6.1 by Leo Kuroshita (Hügelton Instruments), GPL-3.0-only like the
-original. **Version 1.0.1** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
+original. **Version 1.0.2** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
 Five audio tracks, every engine on all five; the lab is for trying things out.
 
 Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything not listed here is Felucca 1.6.1 as it was
 (the sound is the same: the 98 golden renders of `tests/golden.txt` are unchanged).
+
+## 1.0.2: automation records only when you arm it (SEQ > AUTOMATION > REC)
+
+- **Why.** With REC on and the song playing, any knob you turned (on any page), a MIDI CC or an editor edit was written as automation on the selected
+  track, so playing live meant going back to AUTOMATION to delete what you had not meant to record.
+- **What.** AUTOMATION has a new row, **REC**, right under PLAY (KNOB 4: ON / OFF). It is **OFF** at power-on and at every project load, and it is never
+  saved. Automation is recorded only while it is ON (and REC and PLAY are on, on the selected track, as before); with it OFF a turned knob just changes the
+  sound, as with REC off. To record: open SEQ > AUTOMATION, set REC to ON, play and move the knobs; turn it OFF when done. The card icon of the
+  recording (MOTION REC) shows only while it is armed.
+- **Unchanged.** PLAY (play the automation back) is as before; locks made by holding a step and turning a knob, + ADD and the list's own edits are not
+  affected. No change to the project format, the flash or the RAM (one byte).
+- Tests: `motion_test`, `ui_test`, `ui155_test`, `step15_test`, `midi_control_test` arm REC where they record and count the new row; a new check that
+  REC and PLAY with the row OFF record nothing; a new render `auto_rec`.
 
 ## 1.0.1: FUN11, a project and its fifth track in ONE flash object
 
