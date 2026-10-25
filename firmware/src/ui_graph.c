@@ -1502,6 +1502,14 @@ static void graph_events(void)
                        sel ? T_INK : motion_arm ? T_TEXT : T_DIM, bg);
             continue;
         }
+        if (c >> 8 == EVK_RMP) {                     /* RAMP ON / OFF (1.0.3): the events move to the next one */
+            GFX_HOOK_ALIGN(0, y, 0, y + 16, AL_V, "list row text centred up/down");
+            cv_text_on(14, y + LIST_TY, &AF_M, "RAMP", sel ? T_INK : T_MID, bg);
+            GFX_HOOK_ALIGN(0, y, 0, y + 16, AL_V, "list row text centred up/down");
+            cv_text_on(EV_SX, y + LIST_TY, &AF_M, motion_ramping(t) ? "ON" : "OFF",
+                       sel ? T_INK : motion_ramping(t) ? T_TEXT : T_DIM, bg);
+            continue;
+        }
         if (c >> 8 == EVK_QNT) {                     /* QUANTIZE ON / OFF (1.2), the steps nudged: "NUDGED 3" */
             char b[16];
             str_cpy(b, "NUDGED ", sizeof b);

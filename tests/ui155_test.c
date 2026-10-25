@@ -67,21 +67,21 @@ static int auto_k3(void)
     ui.cursor = 0;
     go_page(GR_EVENTS);
     frame();
-    kslow(EN_K1, 3);                                    /* + ADD on step 1: a lock of the page's first parameter */
+    kslow(EN_K1, 4);                                    /* + ADD on step 1: a lock of the page's first parameter */
     press(B_OCTUP);
     kslow(EN_K1, 1);
     kslow(EN_K3, 3);                                    /* .. and one three parameters on */
     press(B_OCTUP);
-    ok = motion_count(t) == 2u && (ev_at(3) >> 8) == EVK_REC && (ev_at(4) >> 8) == EVK_REC;
-    c0 = ev_at(3);
-    c1 = ev_at(4);
+    ok = motion_count(t) == 2u && (ev_at(4) >> 8) == EVK_REC && (ev_at(5) >> 8) == EVK_REC;
+    c0 = ev_at(4);
+    c1 = ev_at(5);
     id1 = MOTION_ID(&motion.event[c1 & 0xFFu]);
-    ok &= MOTION_ID(&motion.event[c0 & 0xFFu]) < id1 && ui.ev_row == 4u && ev_sel() == c1;
+    ok &= MOTION_ID(&motion.event[c0 & 0xFFu]) < id1 && ui.ev_row == 5u && ev_sel() == c1;
     bad += check("AUTOMATION: two locks on step 1, the second (a later parameter) selected", ok);
     r0 = ui.ev_row;
     for (i = 0; i < 8; i++) {                           /* KNOB 3 left, past the first one's parameter */
         kslow(EN_K3, -1);
-        ok &= ui.ev_row == r0 && ev_sel() == c1 && ev_at(3) == c0 && ev_at(4) == c1;
+        ok &= ui.ev_row == r0 && ev_sel() == c1 && ev_at(4) == c0 && ev_at(5) == c1;
     }
     ok &= MOTION_ID(&motion.event[c1 & 0xFFu]) < MOTION_ID(&motion.event[c0 & 0xFFu]);
     bad += check("  KNOB 3 (#199): the row stays where it is and selected while its parameter goes past the other's",
@@ -89,7 +89,7 @@ static int auto_k3(void)
     ok = 1;
     for (i = 0; i < 8; i++) {                           /* .. and back */
         kslow(EN_K3, 1);
-        ok &= ui.ev_row == r0 && ev_sel() == c1 && ev_at(3) == c0;
+        ok &= ui.ev_row == r0 && ev_sel() == c1 && ev_at(4) == c0;
     }
     ok &= MOTION_ID(&motion.event[c1 & 0xFFu]) > MOTION_ID(&motion.event[c0 & 0xFFu]);
     bad += check("  and back to the right: no jump either way", ok);
@@ -97,7 +97,7 @@ static int auto_k3(void)
     ok = ev_sel() == c0;
     for (i = 0; i < 4; i++) {
         kslow(EN_K3, 1);
-        ok &= ui.ev_row == 3u && ev_sel() == c0 && ev_at(4) == c1;
+        ok &= ui.ev_row == 4u && ev_sel() == c0 && ev_at(5) == c1;
     }
     bad += check("  the other row the same (a step's records listed in the order they were added)", ok);
     return bad;

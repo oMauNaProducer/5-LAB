@@ -10,6 +10,8 @@
  *            only while it is ON, so playing live never writes automation by chance
  *   QUANTIZE the third: the track's QUANTIZE (P_SQNT) ON / OFF (KNOB 4) and how many steps have a NUDGE. ON (the
  *            default) plays every step on its start; OFF plays the nudges (seq.c seq_tick)
+ *   RAMP     (5-LAB 1.0.3) after QUANTIZE: OFF (HOLD, Felucca's: an event holds its value until the next) or ON: from one event
+ *            to the next of the same parameter the value moves in a straight line; the locks are not touched. Saved with the project
  *   LOCK / AUTO  a record (motion.c): its step, its parameter, its value
  *   STEP     a step's CHANCE (not 100 %), RATCH (not x1) or NUDGE (not 0): the step's own fields (step_chance,
  *            step_ratchet, step_nudge), shown where they are not at their default, inside LEN; a row being edited
@@ -46,10 +48,10 @@ static void confirm_open(uint32_t kind, uint32_t trk);
 #define EV_NUDGE 0xFCu                                  /* a NUDGE, */
 #define EV_CHANCE 0xFDu                                 /* a CHANCE, */
 #define EV_RATCH 0xFEu                                  /* a RATCH (0xFF: none) */
-enum { EVK_TOP, EVK_REC, EVK_CHANCE, EVK_RATCH, EVK_ADD, EVK_NUDGE, EVK_QNT, EVK_VEL, EVK_ARM };   /* (NUDGE, QUANTIZE: 1.2,
+enum { EVK_TOP, EVK_REC, EVK_CHANCE, EVK_RATCH, EVK_ADD, EVK_NUDGE, EVK_QNT, EVK_VEL, EVK_ARM, EVK_RMP };   /* (NUDGE, QUANTIZE: 1.2,
                                                                                            * #162; VEL: 1.5, #173) */
 #define EVC(k, a) ((uint16_t)((uint32_t)(k) << 8 | (a)))   /* a row: its kind, its record (EVK_REC) or its step */
-#define EV_ROWS (4u + MOTION_MAX + 4u * NSTEP)
+#define EV_ROWS (5u + MOTION_MAX + 4u * NSTEP)
 static int ev_sid(uint32_t id) { return id >= EV_VEL && id <= EV_RATCH; }   /* a step's own field */
 static int ev_skd(uint32_t k) { return k == EVK_CHANCE || k == EVK_RATCH || k == EVK_NUDGE || k == EVK_VEL; }
 
@@ -196,6 +198,7 @@ static uint32_t ev_list(uint16_t *rw)
     rw[n++] = EVC(EVK_TOP, 0);
     rw[n++] = EVC(EVK_ARM, 0);
     rw[n++] = EVC(EVK_QNT, 0);
+    rw[n++] = EVC(EVK_RMP, 0);
     for (s = 0; s < NSTEP; s++) {
         for (k = 0; s < len && k < 4u; k++)
             if ((k == 3u ? ui.ev_vel && ev_vel_row(&t->step[s]) : !ev_sdef(&t->step[s], SK[k])) ||
@@ -220,7 +223,7 @@ static uint32_t ev_cur(uint16_t *rw, uint32_t *np)
 static uint32_t ev_step_of(uint32_t c)
 {
     uint32_t k = c >> 8, a = c & 0xFFu;
-    return k == EVK_REC ? motion.event[a].place & 63u : k == EVK_ADD ? ui.ev_step : k == EVK_QNT || k == EVK_ARM ? 0u : a;
+    return k == EVK_REC ? motion.event[a].place & 63u : k == EVK_ADD ? ui.ev_step : k == EVK_QNT || k == EVK_ARM || k == EVK_RMP ? 0u : a;
 }
 
 /* the page opened, or the track or its sound changed: + ADD's step and parameter inside what the track has */
@@ -372,6 +375,11 @@ static void ev_knob(uint32_t slot, int32_t s)
             motion_set_enabled(t, s > 0);
         return;
     }
+    if (k == EVK_RMP) {                                 /* RAMP (1.0.3): KNOB 4 right RAMP, left HOLD (a setting: no undo) */
+        if (slot == 3u)
+            motion_set_ramp(t, s > 0);
+        return;
+    }
     if (k == EVK_ARM) {                                 /* REC (1.0.2): KNOB 4 right ON, left OFF */
         if (slot == 3u)
             motion_arm = s > 0;
@@ -520,7 +528,7 @@ static void ev_delete(void)
     uint16_t rw[EV_ROWS];
     uint32_t n, c = ev_cur(rw, &n), r = ev_row(n), k = c >> 8;
     const motion_event_t *e;
-    if (k == EVK_TOP || k == EVK_ARM || k == EVK_QNT || k == EVK_ADD) {
+    if (k == EVK_TOP || k == EVK_ARM || k == EVK_QNT || k == EVK_RMP || k == EVK_ADD) {
         ui_message("NOTHING TO DELETE");
         return;
     }

@@ -763,13 +763,13 @@ static int auto_list(void)
     frame();
     id0 = ui.ev_id;
     ok = auto_cur() == EVC(EVK_TOP, 0) && str_eq(act_name(4), "CLEAR") && !act_ready();
-    turn(EN_K1, 3);                                      /* (past QUANTIZE, 1.2) */
+    turn(EN_K1, 4);                                      /* (past REC, QUANTIZE and RAMP) */
     bad += check("AUTOMATION: empty, PLAY then + ADD LOCK (on the SEQ cursor's step, the first knob of the sound page)",
-        ok && cur_page()->graph == GR_EVENTS && rows_n() == 4u && auto_cur() == EVC(EVK_ADD, 0) && ui.ev_step == 4u &&
+        ok && cur_page()->graph == GR_EVENTS && rows_n() == 5u && auto_cur() == EVC(EVK_ADD, 0) && ui.ev_step == 4u &&
         id0 == lock_id(0) && str_eq(act_name(4), "ADD") && act_ready());
     press(B_OCTUP);
     bad += check("  OCT+: a lock on step 5 at the sound's own value, its row selected",
-        motion_lock_get(t, 4, id0, &v) && v == motion_base_value(t, id0) && ui.ev_row == 3u && auto_cur() >> 8 == EVK_REC &&
+        motion_lock_get(t, 4, id0, &v) && v == motion_base_value(t, id0) && ui.ev_row == 4u && auto_cur() >> 8 == EVK_REC &&
         str_eq(ui.msg, "LOCK ADDED") && motion_enabled(t));
     turn(EN_K4, 3);
     bad += check("  KNOB 4: its value", motion_lock_get(t, 4, id0, &v) && v == motion_base_value(t, id0) + 3);
@@ -792,12 +792,12 @@ static int auto_list(void)
     bad += check("  KNOB 1: + ADD LOCK; KNOB 2 there: its step", auto_cur() == EVC(EVK_ADD, 0) && ui.ev_step == 2u);
     press(B_OCTUP);
     bad += check("  OCT+: a second lock on step 3, first in the list (by step)", motion_count(t) == 2u &&
-        motion_lock_get(t, 2, ui.ev_id, &v) && rows_n() == 6u && ui.ev_row == 3u &&
-        (motion.event[row_at(3) & 0xFFu].place & 63u) == 2u);
+        motion_lock_get(t, 2, ui.ev_id, &v) && rows_n() == 7u && ui.ev_row == 4u &&
+        (motion.event[row_at(4) & 0xFFu].place & 63u) == 2u);
     turn(EN_K1, 5);
     press(B_OCTUP);
     bad += check("  OCT+ on + ADD LOCK where one is: ALREADY LISTED, that row selected", motion_count(t) == 2u &&
-        str_eq(ui.msg, "ALREADY LISTED") && ui.ev_row == 3u);
+        str_eq(ui.msg, "ALREADY LISTED") && ui.ev_row == 4u);
     press(B_EDIT);
     bad += check("  EDIT: the row's record goes", motion_count(t) == 1u && !motion_lock_get(t, 2, ui.ev_id, &v) &&
         str_eq(ui.msg, "DELETED"));
@@ -807,7 +807,7 @@ static int auto_list(void)
     bad += check("  held again: gone again", motion_count(t) == 1u);
     frames(2000);
     turn(EN_K1, -5);
-    turn(EN_K1, 3);                                      /* (the first record: the row after PLAY, REC and QUANTIZE) */
+    turn(EN_K1, 4);                                      /* (the first record: the row after PLAY, REC, QUANTIZE and RAMP) */
     v = motion.event[0].value;
     turn(EN_K4, 2); turn(EN_K4, 2); turn(EN_K4, 2);
     ok = motion.event[0].value == v + 6;

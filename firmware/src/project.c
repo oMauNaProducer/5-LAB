@@ -278,6 +278,7 @@ static void proj_motion_to_disk(motion_store_disk_t *d, const motion_store_t *m)
     uint32_t i, n = 0;
     memset(d, 0, sizeof *d);
     d->on = (uint8_t)(m->on & ((1u << NTRK_DISK) - 1u));      /* (the fifth track's bit: PROJ5) */
+    d->rsv[0] = (uint8_t)(m->rsv[0] & ((1u << NTRK_DISK) - 1u));   /* (1.0.3: RAMP, a bit a track; the fifth's: PROJ5) */
     for (i = 0; i < m->count && i < MOTION_MAX; i++) {
         if ((m->event[i].place >> 6) >= NTRK_DISK)
             continue;
@@ -293,6 +294,7 @@ static void proj_motion_from_disk(motion_store_t *m, const motion_store_disk_t *
     memset(m, 0, sizeof *m);
     m->count = d->count;
     m->on = d->on;
+    m->rsv[0] = (uint8_t)(d->rsv[0] & ((1u << NTRK_DISK) - 1u));   /* (zero before 1.0.3: HOLD) */
     for (i = 0; i < MOTION_MAX; i++) {
         m->event[i].place = d->event[i].place;
         m->event[i].param = d->event[i].param;
@@ -886,7 +888,7 @@ static int proj_pack5(proj5_store_t *out, const project_t *q, uint32_t link)
         if (q->fm6[NTRK_DISK][i] > 127u) return 0;
     memset(out, 0, sizeof *out);
     memcpy(b, &magic, 4); memcpy(b + 4, &size, 4); memcpy(b + 8, &link, 4);
-    b[12] = P_COUNT; b[13] = (uint8_t)(q->mch[NTRK_DISK] < MCH_N ? q->mch[NTRK_DISK] : 0u); b[14] = q->sel >= NTRK_DISK; b[15] = (uint8_t)(q->motion.on >> NTRK_DISK & 1u);
+    b[12] = P_COUNT; b[13] = (uint8_t)(q->mch[NTRK_DISK] < MCH_N ? q->mch[NTRK_DISK] : 0u); b[14] = q->sel >= NTRK_DISK; b[15] = (uint8_t)((q->motion.on >> NTRK_DISK & 1u) | (q->motion.rsv[0] >> NTRK_DISK & 1u) << 1);
     if (!proj_pack_trk(b, &pos, &q->t[NTRK_DISK])) return 0;
     memcpy(b + pos, q->fm6[NTRK_DISK], FM6_PACKED); pos += FM6_PACKED;
     for (i = 0; i < CHAIN_ROWS; i++)
@@ -914,7 +916,7 @@ static int proj_unpack5(project_t *q, const uint8_t *b, uint32_t link)
     uint32_t pos = 16u, i, magic, size, sum, lnk, np = b[12], cnt;
     memcpy(&magic, b, 4); memcpy(&size, b + 4, 4); memcpy(&lnk, b + 8, 4); memcpy(&sum, b + PROJ5_SIZE - 4u, 4);
     if (magic != PROJ5_MAGIC || size != PROJ5_SIZE || lnk != link || sum != proj_hash(b, PROJ5_SIZE - 4u) ||
-        np < 8u || np > P_COUNT || b[13] >= MCH_N || b[14] > 1u || b[15] > 1u)
+        np < 8u || np > P_COUNT || b[13] >= MCH_N || b[14] > 1u || b[15] > 3u)
         return 0;
     memset(&tr, 0, sizeof tr);
     if (!proj_unpack_trk(&tr, b, &pos, np, 1)) return 0;
@@ -944,7 +946,8 @@ static int proj_unpack5(project_t *q, const uint8_t *b, uint32_t link)
     for (i = 0; i < CHAIN_ROWS; i++)
         q->chain.row[i].slot[NTRK_DISK] = lane[i];
     if (b[14]) q->sel = NTRK_DISK;
-    q->motion.on = (uint8_t)(q->motion.on | b[15] << NTRK_DISK);
+    q->motion.on = (uint8_t)(q->motion.on | (b[15] & 1u) << NTRK_DISK);
+    q->motion.rsv[0] = (uint8_t)(q->motion.rsv[0] | (b[15] >> 1 & 1u) << NTRK_DISK);   /* (1.0.3: RAMP) */
     return 1;
 }
 /* a stored project (any format) with its fifth-track half (c5: 0 or none stored) -> q */

@@ -794,7 +794,7 @@ static uint32_t foot_rename(void)
     if (g == GR_EVENTS) {
         uint16_t rw[EV_ROWS];
         uint32_t k = ev_cur(rw, 0) >> 8;
-        return k == EVK_TOP || k == EVK_ARM || k == EVK_QNT || k == EVK_ADD ? 1u : 2u;
+        return k == EVK_TOP || k == EVK_ARM || k == EVK_QNT || k == EVK_RMP || k == EVK_ADD ? 1u : 2u;
     }
     if (g == GR_USER)
         return 1u + (uint32_t)up_used(ui.uslot);
@@ -1011,6 +1011,13 @@ static void draw_columns(void)
             draw_column(3, "REC", motion_arm ? "ON" : "OFF", "", VAL(3u), -1, motion_icon());
             return;
         }
+        if (k == EVK_RMP) {                            /* RAMP (1.0.3): the events HOLD their value or RAMP to the next */
+            draw_column(0, "ROW", "ALL", "", VAL(0u), -1, ICON_AUTO);
+            draw_column(1, "", "", "", T_THEME, -1, ICON_NONE);
+            draw_column(2, "", "", "", T_THEME, -1, ICON_NONE);
+            draw_column(3, "RAMP", motion_ramping(t) ? "ON" : "OFF", "", VAL(3u), -1, ICON_AUTO);
+            return;
+        }
         if (k == EVK_QNT) {                            /* QUANTIZE (1.2): the steps with a NUDGE, QNTZ ON / OFF */
             draw_column(0, "ROW", "ALL", "", VAL(0u), -1, ICON_AUTO);
             fmt_int(val, (int32_t)ev_nudged(t));
@@ -1023,9 +1030,9 @@ static void draw_columns(void)
             ev_fix();
             str_cpy(val, "ADD", sizeof val);
         } else {                                       /* "3/7": the rows between QUANTIZE and + ADD */
-            fmt_int(val, (int32_t)r - 2);
+            fmt_int(val, (int32_t)r - 3);
             str_cpy(val + str_len(val), "/", 4);
-            fmt_int(val + str_len(val), (int32_t)n - 4);
+            fmt_int(val + str_len(val), (int32_t)n - 5);
         }
         step = ev_step_of(c);
         id = k == EVK_REC ? MOTION_ID(&motion.event[c & 0xFFu]) : k == EVK_ADD ? ui.ev_id :

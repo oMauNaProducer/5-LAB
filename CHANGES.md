@@ -1,11 +1,29 @@
 # 5-LAB: changes from Felucca 1.6.1
 
 5-LAB is a fork of [Felucca](https://github.com/hugelton/Felucca) 1.6.1 by Leo Kuroshita (Hügelton Instruments), GPL-3.0-only like the
-original. **Version 1.0.2** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
+original. **Version 1.0.3** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
 Five audio tracks, every engine on all five; the lab is for trying things out.
 
 Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything not listed here is Felucca 1.6.1 as it was
 (the sound is the same: the 98 golden renders of `tests/golden.txt` are unchanged).
+
+## 1.0.3: RAMP, automation events that move to the next one (SEQ > AUTOMATION > RAMP)
+
+- **Why.** An automation EVENT held its value until the next event, so a rise or fall (LEVEL from -10 dB at step 1 to 0 dB at step 16, as in a
+  DAW's lane) needed an event on every step: 16 of the 128 records for one parameter over a bar.
+- **What.** A new row, **RAMP**, after QUANTIZE (KNOB 4: ON / OFF, per track, OFF by default = HOLD, Felucca's behaviour). In RAMP, from one event to the
+  next event of the **same parameter** on the track the value moves in a straight line, updated every audio block (not a staircase of steps). Two records
+  (step 1 and step 64) make a ramp over the whole pattern. Before the first event and after the last the value holds, as before.
+- **Locks.** A LOCK is not an event: it sounds on its step as it is and the line goes on after it. Only events (AUTO) are joined.
+- **Saved.** The setting is a bit of the track in the project's automation record: a reserved byte of FUN10 (tracks 1..4; zero in every older project, so
+  they stay in HOLD) and a bit of the fifth track's block. Same flash and RAM layout, one byte of RAM (none for the song: a song plays each slot's setting).
+  Like QUANTIZE it is a setting, not an undo step; CLEAR keeps it.
+- **Cost.** Only a track in RAMP, with automation on, does the work: one pass over its records (at most 128) per audio block. Nothing for the others.
+- Not done (on purpose): a ramp from the last event to the first of the next pass; events beyond LEN still pull the line (a ramp aims at the next
+  event even past the pattern's length).
+- Tests: new `tests/ramp_test.c` (HOLD / RAMP values step by step and inside a step, up and down, a parameter with negative values, three events, a lock in the
+  line, PLAY OFF, CLEAR, the project round trip of tracks 1, 3 and 5, flash save / load, a project without the byte, invalid bits, the row and its keys);
+  the tests that count AUTOMATION's rows count one more; a new render `auto_ramp`.
 
 ## 1.0.2: automation records only when you arm it (SEQ > AUTOMATION > REC)
 

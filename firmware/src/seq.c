@@ -1154,6 +1154,18 @@ static __attribute__((noinline)) void seq_enter(track_t *t, uint32_t top, uint32
     rec_hold(t, t->seq_idx, len);
 }
 
+/* 5-LAB 1.0.3: a track in RAMP (motion.c motion_ramp): where the playhead is in its step, 0..65535, once a block (not
+ * inlined: the audio ISR's loop is the other path) */
+static __attribute__((noinline)) void seq_ramp(track_t *t, uint32_t period)
+{
+    const motion_store_t *m = chain_motion(t);
+    uint32_t cur = step_samples(t, period, t->seq_idx), pos = t->seq_pos, sh = 0;
+    if (!m || !((m->rsv[0] >> trk_index(t)) & 1u) || pos >= cur || cur == 0u)
+        return;                                     /* (stopped: seq_pos is the "not started" mark, past any step) */
+    while ((cur >> sh) > 0xFFFFu)
+        sh++;
+    motion_ramp(t, t->seq_idx, ((pos >> sh) << 16) / (cur >> sh), m);
+}
 static void seq_tick(track_t *t, uint32_t n)
 {
     uint32_t period, len, top;
@@ -1184,6 +1196,7 @@ static void seq_tick(track_t *t, uint32_t n)
         else
             seq_nd_start(t, period, len);
     }
+    seq_ramp(t, period);
     if (t->rat_left)
         seq_ratchet(t, period);
 }

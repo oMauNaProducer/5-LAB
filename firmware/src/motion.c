@@ -50,7 +50,7 @@ static int motion_param(uint32_t id)
 static int motion_valid(const motion_store_t *m)
 {
     uint32_t i, j;
-    if (m->count > MOTION_MAX || (m->on & ~((1u << NTRK) - 1u))) return 0;
+    if (m->count > MOTION_MAX || (m->on & ~((1u << NTRK) - 1u)) || (m->rsv[0] & ~((1u << NTRK) - 1u)) || m->rsv[1]) return 0;
     for (i = 0; i < m->count; i++) {
         const motion_event_t *e = &m->event[i];
         if (!motion_param(MOTION_ID(e)) || e->value < -64 || e->value > 127) return 0;
@@ -60,6 +60,18 @@ static int motion_valid(const motion_store_t *m)
     return 1;
 }
 static int motion_enabled(const track_t *t) { return (motion.on >> trk_index(t)) & 1u; }
+/* 5-LAB 1.0.3: RAMP, a bit a track in motion_store_t.rsv[0] (0 = HOLD: an event holds its value until the next one, as
+ * Felucca; 1 = RAMP: from one event to the next of the same parameter the value moves in a straight line). A setting
+ * of the track, saved in the project (FUN10 rsv[0] for tracks 1..4, PROJ5 for the fifth), not an undo step */
+static void motion_restore(track_t *t);
+static int motion_ramping(const track_t *t) { return (motion.rsv[0] >> trk_index(t)) & 1u; }
+static void motion_set_ramp(track_t *t, uint32_t on)
+{
+    uint32_t f = motion_guard(), b = 1u << trk_index(t);
+    motion.rsv[0] = (uint8_t)(on ? motion.rsv[0] | b : motion.rsv[0] & ~b);
+    if (!on) motion_restore(t);                     /* (the value a ramp left goes back to the base: the next step's event sets it) */
+    motion_unguard(f);
+}
 static uint32_t motion_count(const track_t *t)
 {
     uint32_t i, n = 0, k = trk_index(t);
@@ -289,6 +301,44 @@ static __attribute__((noinline)) void motion_step(track_t *t, uint32_t step, con
         motion_active[k][id / 32u] |= 1u << (id % 32u);
         if (e->param & MOTION_LOCK)
             motion_locked[k][id / 32u] |= 1u << (id % 32u);
+    }
+}
+/* 5-LAB 1.0.3, RAMP: track t is in step `step`, frac / 65536 of the way through it (seq.c seq_tick, once a block, only
+ * for a track in RAMP): each parameter with an automation event at or before this step AND one after it moves in a
+ * straight line from the first's value to the second's, to the position now; before the first and after the last event
+ * nothing changes (the value holds, as in HOLD). A lock sounding now (motion_locked) is left alone. Events only: a lock
+ * is one step's. At most MOTION_MAX records and P_COUNT parameters: a pass of a few hundred operations */
+static uint8_t ramp_ps[P_COUNT], ramp_ns[P_COUNT];
+static int8_t ramp_pv[P_COUNT], ramp_nv[P_COUNT];
+static __attribute__((noinline)) void motion_ramp(track_t *t, uint32_t step, uint32_t frac, const motion_store_t *m)
+{
+    uint32_t k = trk_index(t), i, id;
+    if (!((m->on >> k) & 1u) || !((m->rsv[0] >> k) & 1u) || !((motion_base_valid >> k) & 1u))
+        return;
+    memset(ramp_ps, 0xFF, sizeof ramp_ps);
+    memset(ramp_ns, 0xFF, sizeof ramp_ns);
+    for (i = 0; i < m->count; i++) {
+        const motion_event_t *e = &m->event[i];
+        uint32_t s = e->place & 63u;
+        id = MOTION_ID(e);
+        if ((e->place >> 6) != k || (e->param & MOTION_LOCK) || id >= P_COUNT)
+            continue;
+        if (s <= step) {
+            if (ramp_ps[id] == 0xFFu || s > ramp_ps[id]) { ramp_ps[id] = (uint8_t)s; ramp_pv[id] = e->value; }
+        } else if (ramp_ns[id] == 0xFFu || s < ramp_ns[id]) {
+            ramp_ns[id] = (uint8_t)s; ramp_nv[id] = e->value;
+        }
+    }
+    for (id = 0; id < P_COUNT; id++) {
+        int32_t span, pos, d, v;
+        if (ramp_ps[id] == 0xFFu || ramp_ns[id] == 0xFFu || ((motion_locked[k][id / 32u] >> (id % 32u)) & 1u))
+            continue;
+        span = (int32_t)(ramp_ns[id] - ramp_ps[id]) << 16;
+        pos = ((int32_t)(step - ramp_ps[id]) << 16) + (int32_t)frac;
+        d = (int32_t)ramp_nv[id] - ramp_pv[id];
+        v = ramp_pv[id] + (d * pos + (d >= 0 ? span / 2 : -span / 2)) / span;     /* (|d| <= 191, pos < 64 << 16: fits) */
+        t->p[id] = (int16_t)param_fit(param_desc_of(eng_idx(t->eng_req), id), v);
+        motion_active[k][id / 32u] |= 1u << (id % 32u);
     }
 }
 static void motion_snapshot_track(track_t *t, motion_store_t *out)
