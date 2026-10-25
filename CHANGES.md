@@ -1,11 +1,21 @@
 # 5-LAB: changes from Felucca 1.6.1
 
 5-LAB is a fork of [Felucca](https://github.com/hugelton/Felucca) 1.6.1 by Leo Kuroshita (Hügelton Instruments), GPL-3.0-only like the
-original. **Version 1.0.7** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
+original. **Version 1.0.8** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
 Five audio tracks, every engine on all five; the lab is for trying things out.
 
 Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything not listed here is Felucca 1.6.1 as it was
 (the sound is the same: the 98 golden renders of `tests/golden.txt` are unchanged).
+
+## 1.0.8: the piano roll: a nudged note joins its ties, the slide runs across an overlap
+
+- **A note and its ties.** A note nudged early (QUANTIZE OFF) left a gap between its own bar and the bars of its TIE steps after it, which were drawn from their
+  own columns. The bar now goes on from where it is drawn to where the ties begin, so the note's length is one bar, whatever the NUDGE.
+- **Slide into a note that starts before this one ends.** A note whose length goes past the start of the next note (the next one nudged early, or this one
+  longer by its ties) used to draw the slide from the end of its bar backwards. It now runs from where the next note starts (on this note's row) to where this
+  one ends (on the next note's row). A slide where there is no overlap is as before.
+- The space before the next bar of the same note (1.0.7) also applies to the last bar of a note with ties.
+- No change to the sound, the project, the flash or the RAM. Tests: the `roll_nudge_near` render shows both cases.
 
 ## 1.0.7: the piano roll keeps a space between nudged notes and the slide joins their ends
 

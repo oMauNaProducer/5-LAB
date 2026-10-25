@@ -1614,6 +1614,10 @@ static void setup(int s)
         TSEL->step[9].note[0] = 65; TSEL->step[10].note[0] = 70; step_set_nudge(&TSEL->step[9], 2); step_set_nudge(&TSEL->step[10], -3); TSEL->step[11].note[0] = 65; TSEL->step[11].n = 1; TSEL->step[11].time = ST_NOTE; TSEL->step[11].vel = 99; TSEL->step[12].note[0] = 65; TSEL->step[12].n = 1; TSEL->step[12].time = ST_NOTE; TSEL->step[12].vel = 99; step_set_nudge(&TSEL->step[11], 7); step_set_nudge(&TSEL->step[12], -8);
         for (i = 0; i < 16u; i++) if (i != 2 && i != 5 && i != 8 && (i < 11u)) { if (TSEL->step[i].note[0] && !TSEL->step[i].n) TSEL->step[i].n = 1; }
         for (i = 0; i < 11u; i++) if (TSEL->step[i].n) { TSEL->step[i].time = ST_NOTE; TSEL->step[i].vel = 99; }
+        TSEL->step[13].note[0] = 62; TSEL->step[13].n = 1; TSEL->step[13].time = ST_NOTE; TSEL->step[13].vel = 99; TSEL->step[13].flags |= SF_SLIDE;
+        step_set_nudge(&TSEL->step[13], -8);                                   /* 1.0.8: a note nudged early with a TIE after it (no gap), then a */
+        TSEL->step[14].time = ST_TIE; TSEL->step[14].n = 0;                    /* slide into a note that starts before it ends (nudged early) */
+        TSEL->step[15].note[0] = 67; TSEL->step[15].n = 1; TSEL->step[15].time = ST_NOTE; TSEL->step[15].vel = 99; step_set_nudge(&TSEL->step[15], -8);
         TSEL->p[P_SLEN] = 16; TSEL->p[P_SQNT] = 0; ui.cursor = 12;
         go_page(GR_ROLL);
         break;

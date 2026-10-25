@@ -275,23 +275,29 @@ static void graph_roll(const track_t *t, uint16_t c)
         st = &seq_steps(t)[s];
         col = s == ui.cursor || si == ui.cursor ? T_ACCENT : c;
         {   /* 1.0.7: where the next column's own bar starts (nudged), for the space before it and the slide into it */
-            int32_t bx = x + 2, nbx = 0, nxx = x + PR_CW + 2;
+            int32_t bx = x + 2, nbx = 0, nxx = x + PR_CW + 2, bw = 9;
             const step_t *nb = 0;
+            int tie_next = i + 1u < ncol && seq_steps(t)[nx].time == ST_TIE && pr_src(t, nx, len) == s;
             if (i + 1u < ncol && pr_src(t, nx, len) == nx) {
                 nb = &seq_steps(t)[nx];
                 nbx = pr_nudge_x(t, nb, nxx, 9, ncol);
             }
             if (s == si) {
                 bx = pr_nudge_x(t, st, x + 2, 9, ncol);
-                pr_bars(st, bx, 9, col, (st->flags & SF_ACCENT) != 0u, &y, step_ratchet(st), nb, nbx);
+                if (tie_next)                           /* 1.0.8: its ties go on from where its column ends: no gap after an early nudge */
+                    bw = x + PR_CW - 1 - bx;
+                pr_bars(st, bx, bw, col, (st->flags & SF_ACCENT) != 0u, &y, step_ratchet(st), nb, nbx);
             } else                                    /* a TIE: the bars on through the gap before */
-                pr_bars(st, x - 1, 12, col, (st->flags & SF_ACCENT) != 0u, &y, 1u, 0, 0);
+                pr_bars(st, x - 1, 12, col, (st->flags & SF_ACCENT) != 0u, &y, 1u, nb, nbx);
             if ((st->flags & SF_SLIDE) && step_ratchet(st) == 1u &&   /* (a ratcheted step never slides out) */
                 ns->time == ST_NOTE && ns->n && y >= PR_Y0 && y < ybot) {
                 int32_t ny = clamp(pr_row_y(ns->note[0]), PR_Y0, ybot - PR_RH);
-                int32_t ex = s == si ? bx + pr_bar_w(nb, nbx, pr_note(st, 0), bx, 9) - 1 : x + 10;   /* the end of this bar .. */
-                int32_t sx = nb ? nbx : x + 14;                                                   /* .. to the start of the next */
-                cv_line(ex, y + 2, sx < ex ? ex : sx, ny + 2, T_TEXT);   /* the slide into the next note */
+                int32_t ex = s == si ? bx + pr_bar_w(nb, nbx, pr_note(st, 0), bx, bw) - 1 : x + PR_CW - 2;   /* the last pixel of this note */
+                int32_t sx = nb ? nbx : x + 14;                                                         /* the first of the next one */
+                if (sx < ex)                            /* 1.0.8: the next note starts before this one ends: the slide runs from where it */
+                    cv_line(sx, y + 2, ex, ny + 2, T_TEXT);   /* starts (on this note's row) to where this one ends (on its row) */
+                else
+                    cv_line(ex, y + 2, sx, ny + 2, T_TEXT);   /* the slide into the next note */
             }
         }
     }
