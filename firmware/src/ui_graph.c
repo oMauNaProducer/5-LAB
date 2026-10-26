@@ -627,6 +627,7 @@ static uint32_t steps_hash(const track_t *t)
             16777619u;
         h = (h ^ (st->hit | (uint32_t)st->acc << 8 | (uint32_t)st->note[2] << 16 | (uint32_t)st->note[3] << 24)) * 16777619u;
         h = (h ^ (st->vel | (uint32_t)st->probability << 8)) * 16777619u;   /* (1.5.1: DETAIL, the marks) */
+        h = (h ^ (st->ext | (uint32_t)st->ext2 << 8)) * 16777619u;           /* (1.1.4: the LONG notes 2, 3 and the high bits) */
     }
     return h;
 }
