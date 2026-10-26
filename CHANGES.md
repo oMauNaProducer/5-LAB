@@ -14,11 +14,11 @@ Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything n
   on any of the 5 tracks, each note its own length; any number of notes of the pattern can be long. Down: 2 steps, then **LONG NOTE OFF** (a LONG note of one step is a plain note).
 - **More at once.** Up to **8** LONG notes sound on a track together (1.1.3: 4).
 - **Storage (the saved format changes).** `step_t` is one byte bigger (`ext2`: the high 2 bits of each note's code; the code is now 6 bits, stored as length - 1). On flash the 5th
-  track's block PROJ5 is **1600 bytes** (+320: one byte a step of the 5 tracks, after the old content, under the same hash), inside the same FUN11 object. A project saved
+  track's block PROJ5 is **1480 bytes** (+200: after the old content, under the same hash: a bitmap of the 320 steps that have high bits, then one byte for each of the first 160 of them: a project with more steps than that of lengths over 16 loses the rest), inside the same FUN11 object. A project saved
   by 1.1.0 .. 1.1.3 **opens** (block of 1280 bytes: the high bits are 0; a note with an END code 15 of 1.1.3 is 16 steps); a project saved now does **not open in 1.1.3 or before** (the object is longer).
   The editor's backup takes both sizes.
-- **RAM.** About 2 KB more (a byte a step in about 2,000 steps kept: the 5 tracks, the project in RAM, the chain's sources, the undo) plus 5 x 320 bytes in the pool for the block
-  copies. `build.py` checks the headroom (RAM 4096, pool 8192): not measured on the host.
+- **RAM.** About 2 KB more (a byte a step in about 2,000 steps kept: the 5 tracks, the project in RAM, the chain's sources, the undo) plus 5 x 200 bytes in the pool for the block
+  copies (the first 1.1.4 build with 320 each left the pool 332 B short of the 8192 check). `build.py` checks the headroom (RAM 4096, pool 8192): not measured on the host.
 - Tests: `tests/notelen_test.c` (`len64`: a chord of 4 to step 63 on the 5 tracks, saved, loaded, and the 1280-byte block).
 
 ## 1.1.3: each note of a chord has its own length, and a note can last past the notes after it

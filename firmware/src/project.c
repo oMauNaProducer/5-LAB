@@ -885,10 +885,12 @@ static int proj_unpack(project_t *q, const uint8_t *b, uint32_t st)
  * (a count, then place within the track's 64 steps, id, value), and the hash. */
 #define PROJ5_MAGIC 0x41355446u                /* "FT5A" */
 #define PROJ5_OLD 1280u                        /* (1.0.0 .. 1.1.3: the block as it was) */
-#define PROJ5_SIZE 1600u                       /* 1.1.4: + the high bits of the LONG notes of the 5 tracks (a byte a step, from PROJ5_OLD - 4) */
+#define PROJ5_XN 160u                          /* 1.1.4: the high bits of the LONG notes of the 5 tracks, from PROJ5_OLD - 4: a bitmap of the 320 steps that have */
+#define PROJ5_XB (5u * NSTEP / 8u)             /* any (40 bytes), then a byte each of the first PROJ5_XN of them (the rest of a project of more: lost) */
+#define PROJ5_SIZE (PROJ5_OLD + PROJ5_XB + PROJ5_XN)
 typedef union { uint32_t align; uint8_t raw[PROJ5_SIZE]; } proj5_store_t;
 _Static_assert(16u + 127u + 2u + NSTEP * 9u + 128u + 16u + 1u + 3u * 128u + 4u <= PROJ5_OLD, "PROJ5 holds a track");
-_Static_assert(PROJ5_OLD - 4u + 5u * NSTEP + 4u == PROJ5_SIZE, "PROJ5 holds the LONG notes' high bits");
+_Static_assert(PROJ5_OLD - 4u + PROJ5_XB + PROJ5_XN + 4u == PROJ5_SIZE && PROJ5_SIZE % 4u == 0, "PROJ5 holds the LONG notes' high bits");
 static uint32_t proj_link(const void *main_obj) { return ((const uint32_t *)main_obj)[PROJ_STORE_SIZE / 4u - 1u]; }
 static int proj_pack5(proj5_store_t *out, const project_t *q, uint32_t link)
 {
@@ -910,8 +912,12 @@ static int proj_pack5(proj5_store_t *out, const project_t *q, uint32_t link)
             b[pos++] = (uint8_t)(q->motion.event[i].place & 63u); b[pos++] = q->motion.event[i].param;
             b[pos++] = (uint8_t)q->motion.event[i].value; cnt++;
         }
-    for (i = 0; i < 5u * NSTEP; i++)                /* 1.1.4: the LONG notes' high bits (step_ext_code) */
-        b[PROJ5_OLD - 4u + i] = q->t[i / NSTEP].step[i % NSTEP].hit ? 0u : q->t[i / NSTEP].step[i % NSTEP].ext2;
+    for (i = 0, cnt = 0; i < 5u * NSTEP; i++) {     /* 1.1.4: the LONG notes' high bits (step_ext_code): a bitmap, then the bytes */
+        const step_t *st = &q->t[i / NSTEP].step[i % NSTEP];
+        if (st->hit || !st->ext2 || cnt >= PROJ5_XN) continue;
+        b[PROJ5_OLD - 4u + i / 8u] |= (uint8_t)(1u << (i & 7u));
+        b[PROJ5_OLD - 4u + PROJ5_XB + cnt++] = st->ext2;
+    }
     sum = proj_hash(b, PROJ5_SIZE - 4u); memcpy(b + PROJ5_SIZE - 4u, &sum, 4);
     return 1;
 }
@@ -955,9 +961,14 @@ static int proj_unpack5(project_t *q, const uint8_t *b, uint32_t link)
     }
     q->t[NTRK_DISK] = tr;
     if (size == PROJ5_SIZE)
-        for (i = 0; i < 5u * NSTEP; i++) {
+        for (i = 0, cnt = 0; i < 5u * NSTEP; i++) {
             step_t *st = &q->t[i / NSTEP].step[i % NSTEP];
-            st->ext2 = st->hit ? 0u : b[PROJ5_OLD - 4u + i];
+            st->ext2 = 0;
+            if ((b[PROJ5_OLD - 4u + i / 8u] >> (i & 7u) & 1u) && cnt < PROJ5_XN)
+            {
+                    uint8_t x = b[PROJ5_OLD - 4u + PROJ5_XB + cnt++];
+                    st->ext2 = st->hit ? 0u : x;
+                }
         }
     memcpy(q->fm6[NTRK_DISK], fm, FM6_PACKED);
     q->mch[NTRK_DISK] = b[13];
