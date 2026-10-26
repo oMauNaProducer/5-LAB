@@ -536,6 +536,30 @@ static int rec_add(void)
     song.rec = 0; song.playing = 0;
     return bad;
 }
+/* 1.1.4: a note held through steps that hold notes goes on over them (LONG), it does not erase them */
+static int rec_hold_over(void)
+{
+    int bad = 0, ok;
+    track_t *t = chord3();
+    uint32_t i;
+    clear16(t);
+    t->step[0] = (step_t){{60, 64}, 2, ST_NOTE, 0, 0};
+    for (i = 1; i < 6u; i++) t->step[i] = (step_t){{0}, 0, ST_TIE, 0, 0};
+    t->step[8] = (step_t){{67, 71}, 2, ST_NOTE, 0, 0};
+    for (i = 9; i < 12u; i++) t->step[i] = (step_t){{0}, 0, ST_TIE, 0, 0};
+    song.rec = 1; song.playing = 1;
+    rec_at(t, 2, 0); rec_note(t, 72, 100);
+    for (i = 3; i < 16u; i++) { rec_at(t, i, 0); rec_hold(t, i, 16); }
+    for (i = 0; i < 4u; i++) { rec_at(t, i, 0); rec_hold(t, i, 16); }          /* all the way round */
+    ok = t->step[8].n == 2 && t->step[8].note[0] == 67 && t->step[8].note[1] == 71 && t->step[0].n == 2 && t->step[0].note[0] == 60 &&
+         note_len_eff(t, 2, 0) >= 12 && note_len_eff(t, 0, 0) == 6 && note_len_eff(t, 8, 0) == 4;
+    bad += check("rec hold: a note held over steps with notes: they stay, it goes on over them (LONG)", ok);
+    rec_release(t, 72);
+    ok = t->step[8].n == 2 && t->step[0].n == 2 && step_ext_code(&t->step[2], 0) > 0;
+    bad += check("  and let go: nothing erased, its own length kept", ok);
+    song.rec = 0; song.playing = 0;
+    return bad;
+}
 static int len_edit(void)
 {
     int bad = 0, ok;
@@ -609,6 +633,7 @@ int main(void)
     bad += long_64();
     bad += split_k2();
     bad += rec_add();
+    bad += rec_hold_over();
     bad += masks_fix();
     bad += roll_bars();
     puts(bad ? "notelen tests FAILED" : "notelen tests passed");

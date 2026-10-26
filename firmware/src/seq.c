@@ -829,6 +829,20 @@ static void rec_hold(track_t *t, uint32_t idx, uint32_t len)
     if (idx == t->rh_start)
         return;                                     /* (recorded ahead into the step now starting) */
     s = &t->step[idx];
+    if ((s->time == ST_NOTE && (s->n || s->hit)) || (s->time == ST_REST && step_ext_any(s))) {   /* 1.1.4: a step with notes: the held ones go on as LONG notes, over it, not in place of it */
+        uint32_t i0 = t->rl_n, q;
+        rec_long_start(t, len);
+        t->rh_n = 0;
+        for (q = i0; q < t->rl_n;) {
+            t->rl_len[q]++;
+            rec_long_set(t, q, len);
+            if (t->rl_len[q] >= (len > t->rl_idx[q] ? len - t->rl_idx[q] : 1u))
+                rec_long_drop(t, q);
+            else
+                q++;
+        }
+        return;
+    }
     t->rh_bak = *s;
     t->rh_last = (uint8_t)idx;
     t->rh_ties++;
