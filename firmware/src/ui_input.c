@@ -1249,9 +1249,13 @@ static void seq_entry(uint32_t pressed)
         note = kb_map(t, k);
         if (note == KB_SILENT)
             continue;
+        if (trk_vmode(t) == V_POLY && !drum_track(t) && note_covered(t, ui.cursor, note))
+            continue;                                     /* (1.1.4: a LONG note of this pitch lasts through this step: not entered under it) */
         if (!ui.entry_open) {
             ui.entry_open = 1;
             follow_hold();                                /* (1.6, #242) */
+            if (st->time == ST_TIE && !add)
+                note_longify_at(t, ui.cursor);            /* (1.1.4: the chord whose TIEs pass here goes on under the step entered) */
             if (!add) {
                 st->n = 0;
                 st->time = ST_NOTE;

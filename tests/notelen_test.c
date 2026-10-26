@@ -501,6 +501,38 @@ static int rec_add(void)
     rec_at(t, 6, 0); rec_note(t, 67, 100);
     ok = t->step[6].n == 1 && t->step[6].note[0] == 67;
     bad += check("  another note is", ok);
+    /* step entry (REC armed, stopped): the same */
+    {
+        uint32_t kn, nn;
+        clear16(t);
+        song.rec = 1; song.playing = 0;
+        for (kn = 0; kn < 27u && kb_map(t, kn) > 127u; kn++)
+            ;
+        nn = kb_map(t, kn);
+        t->step[0] = (step_t){{(uint8_t)nn}, 1, ST_NOTE, 0, 0};
+        step_ext_set(&t->step[0], 0, 16);
+        ui.cursor = 5; ui.entry_open = 0;
+        seq_entry(1u << kn);
+        ok = t->step[5].n == 0 && t->step[5].time == ST_REST && !ui.entry_open;
+        bad += check("rec add: step entry: the same note as a LONG one is not entered under it", ok);
+        t->step[0].note[0] = (uint8_t)(nn + 2u);
+        seq_entry(1u << kn);
+        ok = t->step[5].n == 1 && t->step[5].note[0] == nn;
+        ui.entry_open = 0;
+        bad += check("  another is", ok);
+        clear16(t);
+        t->step[0] = (step_t){{60, 64}, 2, ST_NOTE, 0, 0};
+        for (kn = 1; kn < 8u; kn++) t->step[kn] = (step_t){{0}, 0, ST_TIE, 0, 0};
+        for (kn = 0; kn < 27u && kb_map(t, kn) > 127u; kn++)
+            ;
+        t->step[0].note[0] = (uint8_t)(kb_map(t, kn) + 3u);
+        ui.cursor = 4; ui.entry_open = 0;
+        seq_entry(1u << kn);
+        ok = t->step[4].n == 1 && note_len_eff(t, 0, 0) == 8 && note_len_eff(t, 0, 1) == 8 && t->step[2].time == ST_REST;
+        ui.entry_open = 0;
+        bad += check("  a note entered into a chord's TIEs: the chord goes on under it (LONG)", ok);
+        song.rec = 0;
+    }
     song.rec = 0; song.playing = 0;
     return bad;
 }
