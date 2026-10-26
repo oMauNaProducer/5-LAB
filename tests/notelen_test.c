@@ -492,6 +492,15 @@ static int rec_add(void)
     ok = t->step[5].n == 1 && t->step[5].note[0] == 72 && note_len_eff(t, 0, 0) == 8 && note_len_eff(t, 0, 1) == 8 && note_len_eff(t, 5, 0) == 2 &&
          t->step[1].time == ST_REST;
     bad += check("rec add: on TIEs: the chord's notes become LONG (8 steps), the new note on step 6 over them", ok);
+    clear16(t);
+    t->step[0] = (step_t){{65}, 1, ST_NOTE, 0, 0};
+    step_ext_set(&t->step[0], 0, 16);
+    rec_at(t, 6, 0); rec_note(t, 65, 100);
+    ok = t->step[6].n == 0 && step_ext_code(&t->step[0], 0) == 16;
+    bad += check("rec add: the same note as a LONG one already there is not recorded under it", ok);
+    rec_at(t, 6, 0); rec_note(t, 67, 100);
+    ok = t->step[6].n == 1 && t->step[6].note[0] == 67;
+    bad += check("  another note is", ok);
     song.rec = 0; song.playing = 0;
     return bad;
 }

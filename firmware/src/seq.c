@@ -708,6 +708,14 @@ static void rec_note(track_t *t, uint32_t note, uint32_t vel)
         }
         return;
     }
+    if (!t->rh_n && !t->rl_n && !(s->time == ST_NOTE && s->n)) {   /* 1.1.4: the same pitch already lasts through this step (a LONG note, a note's TIEs): not recorded again under it */
+        uint32_t j, q;
+        for (j = idx; j-- > 0;)
+            if (t->step[j].time == ST_NOTE && !t->step[j].hit)
+                for (q = 0; q < t->step[j].n && q < 4u; q++)
+                    if (t->step[j].note[q] == note && j + note_len_eff(t, j, q) > idx)
+                        return;
+    }
     if (s->time != ST_NOTE || !s->n || trk_vmode(t) != V_POLY) {
         if (trk_vmode(t) == V_POLY && s->time == ST_TIE && !t->rh_n && !t->rl_n)
             note_longify_at(t, idx);                /* (1.1.4: a chord's TIEs pass here: its notes become LONG notes, they go on under this one) */
