@@ -5,6 +5,8 @@
 #define UI_TEST_NO_MAIN 1
 #include "ui_test.c"
 
+#define PX(x, y) (cv_px[(uint32_t)(y) * cv_w + (uint32_t)(x)] == 0x1FF8u)
+
 static int sounding(const track_t *t, uint32_t note)
 {
     uint32_t i;
@@ -72,6 +74,213 @@ static int seq_lengths(void)
     seq_stop();
     return bad;
 }
+
+static int lng_has(const track_t *t, uint32_t p)
+{
+    uint32_t i;
+    for (i = 0; i < 4u; i++)
+        if (t->lng_p[i] == p)
+            return 1;
+    return 0;
+}
+/* 1.2.0: a LONG note passes the notes of the steps after it */
+static int long_notes(void)
+{
+    int bad = 0;
+    track_t *t = chord3();
+    uint32_t ss = div_samples(2), m = 3u * CTL;
+    uint32_t i;
+    for (i = 0; i < 4u; i++) memset(&t->step[i], 0, sizeof t->step[i]), t->step[i].time = ST_REST;
+    t->step[0] = (step_t){{60}, 1, ST_NOTE, 0, 0};
+    t->step[4] = (step_t){{67}, 1, ST_NOTE, 0, 0};
+    step_ext_set(&t->step[0], 0, 8);                 /* F (60): 8 steps, over G on step 5 */
+    bad += check("long: the code in the acc byte of a step with no hit", step_ext_code(&t->step[0]) == 8 && step_ext_note(&t->step[0]) == 0);
+    seq_start(); pos = 0;
+    run_to(t, ss / 4u);
+    bad += check("  step 1: the long note sounds, outside seq_notes", lng_has(t, 60) && !sounding(t, 60));
+    run_to(t, 4u * ss + m);
+    bad += check("  step 5: G sounds, F goes on", lng_has(t, 60) && sounding(t, 67));
+    run_to(t, 6u * ss + m);
+    bad += check("  step 7: G is off (its own step), F still on", lng_has(t, 60) && !sounding(t, 67));
+    run_to(t, 7u * ss + ss / 4u);
+    bad += check("  step 8, first quarter: F still on", lng_has(t, 60));
+    run_to(t, 8u * ss + m);
+    bad += check("  step 9: F is off", !lng_has(t, 60));
+    seq_stop();
+    bad += check("  STOP leaves nothing", !lng_has(t, 60) && t->seq_n == 0);
+
+    t = chord3();
+    for (i = 0; i < 4u; i++) memset(&t->step[i], 0, sizeof t->step[i]), t->step[i].time = ST_REST;
+    t->step[2] = (step_t){{60}, 1, ST_NOTE, 0, 0};
+    t->step[9] = (step_t){{67}, 1, ST_NOTE, 0, 0};
+    step_ext_set(&t->step[2], 0, EXT_END);
+    seq_start(); pos = 0;
+    run_to(t, 9u * ss + m);
+    bad += check("  END: F from step 3 passes G on step 10", lng_has(t, 60) && sounding(t, 67));
+    run_to(t, 15u * ss + ss / 4u);
+    bad += check("  END: still on in the last step", lng_has(t, 60));
+    run_to(t, 15u * ss + ss * 3u / 4u);
+    bad += check("  END: off at the gate of the last step of the pattern", !lng_has(t, 60));
+    seq_stop();
+
+    t = chord3();                                    /* a chord with the long note second: the others are normal */
+    for (i = 0; i < 4u; i++) memset(&t->step[i], 0, sizeof t->step[i]), t->step[i].time = ST_REST;
+    t->step[0] = (step_t){{60, 64}, 2, ST_NOTE, 0, 0};
+    step_ext_set(&t->step[0], 1, 4);
+    seq_start(); pos = 0;
+    run_to(t, ss * 2u + m);
+    bad += check("  a chord: the long E goes on, C ended with its step", lng_has(t, 64) && !sounding(t, 60) && !sounding(t, 64));
+    run_to(t, 4u * ss + m);
+    bad += check("  .. until its 4 steps are over", !lng_has(t, 64));
+    seq_stop();
+    t->step[0].hit = 1;
+    bad += check("  a step with a hit has no long note (the acc byte is the drum accents)", step_ext_code(&t->step[0]) == 0);
+    return bad;
+}
+
+/* 1.2.0: live recording: each key lasts as long as it was held, a chord grows key by key and lets go together (or apart) */
+static void rec_at(track_t *t, uint32_t step, uint32_t half)
+{
+    uint32_t sl = step_samples(t, div_samples((uint32_t)t->p[P_SDIV]), step);
+    t->seq_idx = (uint16_t)step;
+    t->seq_pos = half ? sl * 3u / 4u : 0u;
+}
+static int rec_long(void)
+{
+    int bad = 0, ok, s;
+    track_t *t = chord3();
+    uint32_t i;
+    for (i = 0; i < 16u; i++) { memset(&t->step[i], 0, sizeof t->step[i]); t->step[i].time = ST_REST; }
+    song.rec = 1; song.playing = 1;
+    rec_at(t, 0, 0); rec_note(t, 60, 100);
+    for (s = 1; s < 8; s++) {
+        rec_at(t, (uint32_t)s, 0);
+        rec_hold(t, (uint32_t)s, 16);
+        if (s == 2) rec_note(t, 64, 100);
+        if (s == 4) rec_note(t, 67, 100);
+    }
+    rec_at(t, 8, 0); rec_hold(t, 8, 16);
+    rec_release(t, 60); rec_release(t, 64); rec_release(t, 67);
+    song.rec = 0; song.playing = 0;
+    ok = t->step[0].note[0] == 60 && step_ext_code(&t->step[0]) == 8 && step_ext_note(&t->step[0]) == 0;
+    bad += check("rec: C pressed on step 1 and held to the start of step 9: its LONG note is 8 steps", ok);
+    ok = t->step[2].time == ST_NOTE && t->step[2].note[0] == 64 && step_ext_code(&t->step[2]) == 6;
+    bad += check("  E pressed on step 3 (over C): 6 steps", ok);
+    ok = t->step[4].note[0] == 67 && !step_ext_code(&t->step[4]) && t->step[5].time == ST_TIE && t->step[7].time == ST_TIE && note_len(t, 4) == 4;
+    bad += check("  G pressed on step 5 and let go with the others: TIEs to step 8, no LONG note", ok);
+    ok = t->step[1].time == ST_TIE && note_len_eff(t, 0, 0) == 8 && note_len_eff(t, 2, 0) == 6;
+    bad += check("  the length of each note as the UI reads it", ok);
+
+    for (i = 0; i < 16u; i++) { memset(&t->step[i], 0, sizeof t->step[i]); t->step[i].time = ST_REST; }
+    song.rec = 1; song.playing = 1;                  /* a chord of three, let go one by one */
+    rec_at(t, 0, 0); rec_note(t, 60, 100); rec_note(t, 64, 100); rec_note(t, 67, 100);
+    rec_at(t, 1, 0); rec_hold(t, 1, 16);
+    rec_at(t, 2, 0); rec_hold(t, 2, 16); rec_release(t, 67);          /* G let go at the start of step 3: 2 steps */
+    rec_at(t, 3, 0); rec_hold(t, 3, 16);
+    rec_at(t, 4, 0); rec_hold(t, 4, 16); rec_release(t, 64);          /* E at the start of step 5: 4 steps */
+    rec_at(t, 5, 0); rec_hold(t, 5, 16);
+    rec_at(t, 6, 0); rec_hold(t, 6, 16); rec_release(t, 60);          /* C at the start of step 7: 6 steps */
+    song.rec = 0; song.playing = 0;
+    ok = note_len_k(t, 0, 2) == 2 && note_len_k(t, 0, 1) == 4 && note_len_k(t, 0, 0) == 6 && note_len(t, 0) == 6;
+    bad += check("rec: a chord let go key by key: each note as long as it was held (the TIEs' masks)", ok);
+    return bad;
+}
+
+static int long_edit(void)
+{
+    int bad = 0, ok;
+    track_t *t = chord3();
+    const char *m;
+    uint32_t i, n;
+    for (i = 0; i < 16u; i++) { memset(&t->step[i], 0, sizeof t->step[i]); t->step[i].time = ST_REST; }
+    t->step[0] = (step_t){{60}, 1, ST_NOTE, 0, 0};
+    t->step[7] = (step_t){{67}, 1, ST_NOTE, 0, 0};
+    for (i = 0; i < 6u; i++) n = note_edit_k(t, 0, 0, 1, &m);
+    ok = n == 7 && !step_ext_code(&t->step[0]) && t->step[6].time == ST_TIE && !m;
+    bad += check("long edit: KNOB 3 on a held note grows its TIEs up to the next note (7 steps)", ok);
+    n = note_edit_k(t, 0, 0, 1, &m);
+    ok = n == 8 && step_ext_code(&t->step[0]) == 8 && step_ext_note(&t->step[0]) == 0 && t->step[7].note[0] == 67 && !m;
+    bad += check("  one more: a LONG note, over G (8 steps)", ok);
+    for (i = 0; i < 20u; i++) n = note_edit_k(t, 0, 0, 1, &m);
+    ok = n == 16 && step_ext_code(&t->step[0]) == EXT_END && m && !strcmp(m, "END OF PATTERN");
+    bad += check("  up to the end of the pattern: END, and 'END OF PATTERN' past it", ok);
+    n = note_edit_k(t, 0, 0, -1, &m);
+    ok = n == 15 && step_ext_code(&t->step[0]) == 15;
+    bad += check("  one down from END: 15 steps", ok);
+    for (i = 0; i < 14u; i++) n = note_edit_k(t, 0, 0, -1, &m);
+    ok = n == 1 && step_ext_code(&t->step[0]) == 1;
+    bad += check("  down to 1", ok);
+    n = note_edit_k(t, 0, 0, -1, &m);
+    ok = !step_ext_code(&t->step[0]) && m && !strcmp(m, "LONG NOTE OFF");
+    bad += check("  below 1: the LONG note is off (back to its TIEs)", ok);
+    /* a second note of the step: one LONG note a step */
+    t->step[0] = (step_t){{60, 64}, 2, ST_NOTE, 0, 0};
+    t->step[1] = (step_t){{0}, 0, ST_REST, 0, 0};
+    step_ext_set(&t->step[0], 1, 5);
+    for (i = 0; i < 3u; i++) n = note_edit_k(t, 0, 0, 1, &m);
+    ok = !step_ext_code(&t->step[0]) ? 0 : step_ext_note(&t->step[0]) == 1;
+    bad += check("  the second note's LONG note stays when the first is turned", ok);
+    t->step[1] = (step_t){{0}, 0, ST_NOTE, 0, 0};
+    t->step[1].note[0] = 70; t->step[1].n = 1;
+    n = note_edit_k(t, 0, 0, 1, &m);
+    ok = (m && !strcmp(m, "ONE LONG NOTE A STEP")) || n >= 1;
+    bad += check("  .. and a note blocked by the next step with a LONG note already there says so", ok);
+    /* taking a note out of the chord keeps the LONG note with its note */
+    t->step[0] = (step_t){{60, 64, 67}, 3, ST_NOTE, 0, 0};
+    step_ext_set(&t->step[0], 2, 6);
+    tie_masks_fix(t, 0, 0);
+    ok = step_ext_code(&t->step[0]) == 6 && step_ext_note(&t->step[0]) == 1;
+    bad += check("  a note out of the chord before it: the LONG note's index follows", ok);
+    tie_masks_fix(t, 0, 1);
+    ok = !step_ext_code(&t->step[0]);
+    bad += check("  its own note out: no LONG note", ok);
+    return bad;
+}
+static int long_roll(void)
+{
+    int bad = 0;
+    track_t *t = chord3();
+    uint32_t i;
+    for (i = 0; i < 16u; i++) { memset(&t->step[i], 0, sizeof t->step[i]); t->step[i].time = ST_REST; }
+    t->step[0] = (step_t){{60}, 1, ST_NOTE, 0, 0};
+    t->step[7] = (step_t){{67}, 1, ST_NOTE, 0, 0};
+    step_ext_set(&t->step[0], 0, 11);
+    song.sel = 0; ui.cursor = 15; ui.bank = 0;
+    proll.lo = 58;
+    cv_begin(240, 124, T_BG);
+    graph_roll(t, 0xF81Fu);
+    {
+        int32_t yc = pr_row_y(60) + 2, yg = pr_row_y(67) + 2;
+        #define C2(i) (PR_X0 + (i) * PR_CW + 6)
+        bad += check("long roll: the bar of C from step 1 to step 11, unbroken over G's step", PX(C2(0), yc) && PX(C2(6), yc) && PX(C2(7), yc) && PX(C2(10), yc) &&
+                     PX(C2(0) + 5, yc) && PX(PR_X0 + 7 * PR_CW + 1, yc) && !PX(C2(11), yc));
+        bad += check("  G is drawn on its own row in step 8", PX(C2(7), yg) && !PX(C2(8), yg));
+    }
+    t->step[0].acc = 0;
+    cv_begin(240, 124, T_BG);
+    graph_roll(t, 0xF81Fu);
+    bad += check("  without the LONG note C is one step", PX(C2(0), pr_row_y(60) + 2) && !PX(C2(1), pr_row_y(60) + 2));
+    return bad;
+}
+static int long_project(void)
+{
+    int bad = 0;
+    track_t *t = chord3();
+    uint32_t i;
+    for (i = 0; i < 16u; i++) { memset(&t->step[i], 0, sizeof t->step[i]); t->step[i].time = ST_REST; }
+    t->step[3] = (step_t){{60, 64}, 2, ST_NOTE, 0, 0};
+    step_ext_set(&t->step[3], 1, 9);
+    t->step[5] = (step_t){{0}, 0, ST_NOTE, 0, 0};
+    t->step[5].hit = 1; t->step[5].acc = 1;
+    project_save(0);
+    t->step[3] = (step_t){{0}, 0, ST_REST, 0, 0};
+    t->step[5] = t->step[3];
+    project_load(0);
+    t = &trk[0];
+    bad += check("long project: a LONG note is saved and loaded with its step", step_ext_code(&t->step[3]) == 9 && step_ext_note(&t->step[3]) == 1 && t->step[3].note[1] == 64);
+    bad += check("  a drum hit's accent too", t->step[5].hit == 1 && t->step[5].acc == 1);
+    return bad;
+}
 static int len_edit(void)
 {
     int bad = 0, ok;
@@ -109,7 +318,6 @@ static int masks_fix(void)
     bad += check("  a fresh chord: masks cleared", !tie_mask(&t->step[1]) && !tie_mask(&t->step[2]) && !tie_mask(&t->step[3]));
     return bad;
 }
-#define PX(x, y) (cv_px[(uint32_t)(y) * cv_w + (uint32_t)(x)] == 0x1FF8u)
 static int roll_bars(void)
 {
     int bad = 0;
@@ -137,6 +345,11 @@ int main(void)
     int bad = 0;
     bad += seq_lengths();
     bad += len_edit();
+    bad += long_notes();
+    bad += rec_long();
+    bad += long_edit();
+    bad += long_roll();
+    bad += long_project();
     bad += masks_fix();
     bad += roll_bars();
     puts(bad ? "notelen tests FAILED" : "notelen tests passed");

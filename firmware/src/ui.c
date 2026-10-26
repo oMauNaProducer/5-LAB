@@ -625,6 +625,55 @@ static uint32_t note_set_len_k(track_t *t, uint32_t i, uint32_t k, uint32_t want
     return note_len_k(t, i, k);
 }
 
+/* 1.2.0: note k of the chord at step i, its length as it sounds: its LONG length (core.h step_ext_code) if it has one, else its TIEs' */
+static uint32_t note_len_eff(const track_t *t, uint32_t i, uint32_t k)
+{
+    const step_t *s = &t->step[i];
+    uint32_t c = step_ext_code(s), len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP), room = len > i ? len - i : 1u;
+    if (c && step_ext_note(s) == k)
+        return c == EXT_END || c > room ? room : c;
+    return note_len_k(t, i, k);
+}
+/* KNOB 3 on a held note of the chord (steps: the turn): its TIEs while they can grow (up to the next note), then a LONG note that goes on
+ * over the notes after it (one a step); down to 1 and below it the LONG note is off. msg: what stopped it. Returns the length it got */
+static uint32_t note_edit_k(track_t *t, uint32_t i, uint32_t k, int32_t steps, const char **msg)
+{
+    step_t *s = &t->step[i];
+    uint32_t len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP), room = len > i ? len - i : 1u;
+    uint32_t was = note_len_eff(t, i, k), c = step_ext_code(s);
+    int32_t want = (int32_t)was + steps;
+    *msg = 0;
+    if (c && step_ext_note(s) == k) {                 /* a LONG note: its length */
+        if (want < 1) {
+            step_ext_set(s, 0, 0);
+            *msg = "LONG NOTE OFF";
+            return note_len_k(t, i, k);
+        }
+        if ((uint32_t)want >= room) {
+            if (steps > 0 && was >= room)
+                *msg = "END OF PATTERN";
+            want = (int32_t)room;
+        }
+        step_ext_set(s, k, (uint32_t)want >= room ? EXT_END : (uint32_t)want);
+        return (uint32_t)want;
+    }
+    {
+        uint32_t n = note_set_len_k(t, i, k, (uint32_t)clamp(want, 1, NSTEP));
+        if (steps > 0 && n == was) {
+            if (i + was >= len) {
+                *msg = "END OF PATTERN";
+            } else if (c) {                           /* another note of the step is the long one */
+                *msg = "ONE LONG NOTE A STEP";
+            } else {                                  /* a note ahead stops the TIEs: the note goes on over it */
+                uint32_t w = (uint32_t)want;
+                step_ext_set(s, k, w >= room ? EXT_END : w);
+                return w >= room ? room : w;
+            }
+        }
+        return n;
+    }
+}
+
 /* the note of step st a key held on the selected track plays (its index in st->note), -1: none (1.1.0: KNOB 3 on a held note) */
 static int held_note_idx(const step_t *st)
 {

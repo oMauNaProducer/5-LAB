@@ -224,6 +224,34 @@ static int32_t pr_nudge_x(const track_t *t, const step_t *st, int32_t x, int32_t
     x += d;
     return x < lo ? lo : x > hi ? hi : x;
 }
+/* 5-LAB 1.2.0: the LONG notes (core.h step_ext_code) of the pattern that reach this page: one bar from the note's step to its last, over
+ * the notes of the steps between */
+static void pr_longs(const track_t *t, uint32_t base, uint32_t ncol, uint16_t c)
+{
+    uint32_t s0, len = (uint32_t)t->p[P_SLEN];
+    for (s0 = 0; s0 < len && s0 < base + ncol; s0++) {
+        const step_t *st = &seq_steps(t)[s0];
+        uint32_t code = step_ext_code(st), n, last, b;
+        step_t tmp;
+        int32_t x0, x1, y = -10000;
+        if (!code)
+            continue;
+        n = code == EXT_END || code > len - s0 ? len - s0 : code;
+        last = s0 + n - 1u;
+        if (last < base)
+            continue;
+        b = last < base + ncol - 1u ? last : base + ncol - 1u;   /* the last column of this page it covers */
+        x0 = s0 >= base ? PR_X0 + (int32_t)(s0 - base) * PR_CW + 2 : PR_X0 + 1;
+        if (s0 >= base && step_ratchet(st) == 1u)
+            x0 = pr_nudge_x(t, st, x0, 9, ncol);
+        x1 = PR_X0 + (int32_t)(b - base) * PR_CW + (last > b ? PR_CW - 1 : 10);
+        memset(&tmp, 0, sizeof tmp);
+        tmp.note[0] = st->note[step_ext_note(st)];
+        tmp.n = 1;
+        tmp.time = ST_NOTE;
+        pr_bars(&tmp, x0, x1 - x0 + 1, ui.cursor >= s0 && ui.cursor <= last ? T_ACCENT : c, (st->flags & SF_ACCENT) != 0u, &y, 1u, 0, 0, 0u, 0u);
+    }
+}
 static void graph_roll(const track_t *t, uint16_t c)
 {
     uint32_t i, len = (uint32_t)t->p[P_SLEN], base = ui.bank * 16u, ncol, mask = scale_mask(t), held = pr_held();
@@ -273,9 +301,11 @@ static void graph_roll(const track_t *t, uint16_t c)
         const step_t *st, *ns = &seq_steps(t)[nx];
         int32_t x = PR_X0 + (int32_t)i * PR_CW, y = -10000;
         uint16_t col;
+        uint32_t lskip;
         if (s == NSTEP)
             continue;                                 /* a REST, empty, or a TIE after one */
         st = &seq_steps(t)[s];
+        lskip = step_ext_code(st) ? 1u << step_ext_note(st) : 0u;   /* (1.2.0: its LONG note is drawn below) */
         col = s == ui.cursor || si == ui.cursor ? T_ACCENT : c;
         {   /* 1.0.7: where the next column's own bar starts (nudged), for the space before it and the slide into it */
             int32_t bx = x + 2, nbx = 0, nxx = x + PR_CW + 2, bw = 9;
@@ -289,10 +319,10 @@ static void graph_roll(const track_t *t, uint16_t c)
                 bx = pr_nudge_x(t, st, x + 2, 9, ncol);
                 if (tie_next)                           /* 1.0.8: its ties go on from where its column ends: no gap after an early nudge */
                     bw = x + PR_CW - 1 - bx;
-                pr_bars(st, bx, bw, col, (st->flags & SF_ACCENT) != 0u, &y, step_ratchet(st), nb, nbx, 0u,
+                pr_bars(st, bx, bw, col, (st->flags & SF_ACCENT) != 0u, &y, step_ratchet(st), nb, nbx, lskip,
                         tie_next ? tie_mask(&seq_steps(t)[nx]) : 0u);
             } else                                    /* a TIE: the bars on through the gap before (the notes it holds) */
-                pr_bars(st, x - 1, 12, col, (st->flags & SF_ACCENT) != 0u, &y, 1u, nb, nbx, tie_mask(&seq_steps(t)[si]), 0u);
+                pr_bars(st, x - 1, 12, col, (st->flags & SF_ACCENT) != 0u, &y, 1u, nb, nbx, tie_mask(&seq_steps(t)[si]) | lskip, 0u);
             if ((st->flags & SF_SLIDE) && step_ratchet(st) == 1u &&   /* (a ratcheted step never slides out) */
                 ns->time == ST_NOTE && ns->n && y >= PR_Y0 && y < ybot) {
                 int32_t ny = clamp(pr_row_y(ns->note[0]), PR_Y0, ybot - PR_RH);
@@ -305,6 +335,7 @@ static void graph_roll(const track_t *t, uint16_t c)
             }
         }
     }
+    pr_longs(t, base, ncol, c);
 }
 /* SEQ > STEP on a DRUM track: the grid, 8 lanes x the 16 steps of the page shown. Lanes by their two-letter
  * names (BD SD CP CH OH TM RS CB; CG CL CY on the other kits). A hit is a rounded square (accented: the

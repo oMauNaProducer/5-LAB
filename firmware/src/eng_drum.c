@@ -154,7 +154,7 @@ static uint32_t step_lanes(const step_t *s)
 }
 
 /* .. and which of them are accented */
-static uint32_t step_accents(const step_t *s) { return s->flags & SF_ACCENT ? step_lanes(s) : s->acc & step_lanes(s); }
+static uint32_t step_accents(const step_t *s) { return s->flags & SF_ACCENT ? step_lanes(s) : s->hit ? s->acc & step_lanes(s) : 0u; }   /* (1.2.0: with no hit the acc byte is a LONG note) */
 
 /* a step's notes that are a lane's note become that lane's hits (the same note, the same velocity: nothing
  * sounds different). Other notes (a low tom 41, a crash 49) stay notes, shown on their lane. A step accent
@@ -165,6 +165,8 @@ static void step_to_grid(step_t *s)
     uint32_t i, k = 0;
     if (s->time != ST_NOTE)
         return;
+    if (!s->hit)
+        s->acc = 0;                                 /* (1.2.0: a LONG note is not a drum accent) */
     for (i = 0; i < s->n && i < 4u; i++) {
         uint32_t l = drum_lane(s->note[i]);
         if (s->note[i] == DRUM_LANE_NOTE[l])

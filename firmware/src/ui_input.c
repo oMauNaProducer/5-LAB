@@ -921,12 +921,15 @@ static void step_edit(uint32_t slot, int32_t steps)
         break;
     case 2:                                               /* TIME; a note's LEN (1.5: ui.c note_set_len) */
         if (step_on(st)) {
-            int hk = st->n > 1u ? held_note_idx(st) : -1;   /* 1.1.0: a key of the chord held: that note's LEN alone */
-            uint32_t was = hk >= 0 ? note_len_k(TSEL, ui.cursor, (uint32_t)hk) : note_len(TSEL, ui.cursor), n;
+            int hk = st->n ? held_note_idx(st) : -1;      /* 1.1.0: a key of the chord held: that note's LEN alone (1.2.0: it can go on over the next notes) */
+            const char *em = 0;
+            uint32_t was = hk >= 0 ? note_len_eff(TSEL, ui.cursor, (uint32_t)hk) : note_len(TSEL, ui.cursor), n;
             step_undo_take(TSEL, 0x2000u);                /* (a knob turned on: one undo, SAVE held) */
-            if (hk >= 0)
-                n = note_set_len_k(TSEL, ui.cursor, (uint32_t)hk, (uint32_t)clamp((int32_t)was + steps, 1, NSTEP));
-            else
+            if (hk >= 0) {
+                n = note_edit_k(TSEL, ui.cursor, (uint32_t)hk, steps, &em);
+                if (em)
+                    ui_message(em);
+            } else
                 n = note_set_len(TSEL, ui.cursor, (uint32_t)clamp((int32_t)was + steps, 1, NSTEP));
             motion_undo_done(TSEL);
             if (steps > 0 && n == was)

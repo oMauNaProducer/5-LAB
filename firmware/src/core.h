@@ -165,6 +165,16 @@ typedef struct {                 /* acid-style step: up to 4 notes (POLY), time,
 /* 5-LAB 1.1.0: a chord's notes with lengths of their own. A TIE step's vel (unused on a TIE) = 0x10 | mask: bit k of the mask = note k of the
  * NOTE step the TIEs follow ended before this TIE (seq.c, ui.c note_set_len_k). Any other vel (0, a project of before, a REST's 96 ...) is: all go on */
 static inline uint32_t tie_mask(const step_t *s) { return s->time == ST_TIE && (s->vel & 0x70u) == 0x10u ? (uint32_t)s->vel & 15u : 0u; }
+/* 5-LAB 1.2.0: a LONG note. One note of a NOTE step (not a drum step: no hits) may last past the notes of the steps after it, for a number of steps of its
+ * own: the step's `acc` byte (which only the lane hits use, so with hit == 0 it is free) holds note index k << 6 | code, code 1..62 the length in steps,
+ * EXT_END (63) up to the end of the pattern; 0 none. It is saved with the step (project.c) and moves with it (every tool copies steps whole) */
+#define EXT_END 63u
+static inline uint32_t step_ext_code(const step_t *s)
+{
+    return !s->hit && s->time == ST_NOTE && (s->acc & 63u) && (uint32_t)(s->acc >> 6) < s->n ? (uint32_t)s->acc & 63u : 0u;
+}
+static inline uint32_t step_ext_note(const step_t *s) { return (uint32_t)s->acc >> 6; }
+static inline void step_ext_set(step_t *s, uint32_t k, uint32_t code) { if (!s->hit) s->acc = (uint8_t)(code ? k << 6 | (code & 63u) : 0u); }
 static inline uint8_t tie_vel(uint32_t m) { return (uint8_t)(m & 15u ? 0x10u | (m & 15u) : 0u); }
 typedef struct {                 /* a step as formats 1..4 (projects to FUN4) stored it: no hits */
     uint8_t note[4];
@@ -291,6 +301,8 @@ typedef struct track {
     uint8_t seq_n;
     uint8_t seq_hold;            /* last step slides: keep the notes until the next step */
     uint8_t seq_hp[4];           /* 1.1.0: the pitch each note of the playing step sounds (0 none), seq_rel the notes ending at the end of this step (a bit */
+    uint8_t lng_p[4], lng_left[4];   /* 1.2.0: LONG notes sounding (seq.c seq_lng_*): pitch (0 free), steps still to start before its last one */
+    uint32_t lng_off[4];            /* .. samples to its note-off once in its last step */
     uint8_t seq_rel, seq_gone;   /* a note of the step: its TIEs' note mask), seq_gone those released already (seq.c seq_part_release) */
     uint8_t slide_glide;         /* next legato note glides (slide) */
     uint8_t rat_left;            /* RATCH: repeats of the playing step still to come (seq.c seq_ratchet) */
@@ -308,6 +320,9 @@ typedef struct track {
     uint8_t rh_ties;             /* TIE steps written after it */
     uint8_t rh_last;             /* the last of them; rh_bak: what it held (an early release puts it back) */
     step_t rh_bak;
+    uint8_t rh_gone;             /* 1.2.0: bit k: note k of that step was let go (the TIEs written after it end it: tie_vel) */
+    uint8_t rl_n, rl_idx[4], rl_note[4], rl_len[4];   /* 1.2.0: recorded notes still held that a later step cut off from the hold above: the step
+                                  * they were recorded into, their pitch, the steps held so far (rec_hold grows the step's LONG note) */
     /* mono */
     uint8_t mono_stack[8];
     uint8_t nmono;
@@ -325,9 +340,9 @@ typedef struct track {
     uint8_t lfo_wrap;            /* the LFO's phase wrapped this block: its S&H is drawn after the parts (voice.c) */
     uint32_t esync_k[3];         /* ATK's step, DEC's and REL's coefficient (Q16) this block (voice.c esync_coef) */
     uint8_t spread_on;           /* SPREAD this block (fx.c mix_part, voice.c track_render) */
-    uint8_t rsv_sz[15];          /* (sizeof(track_t) a multiple of 16: below) */
+    uint8_t rsv_sz[4];          /* (sizeof(track_t) a multiple of 16: below) */
 #else
-    uint8_t rsv_sz[12];          /* (sizeof(track_t) a multiple of 16: below) */
+    uint8_t rsv_sz[2];          /* (sizeof(track_t) a multiple of 16: below) */
 #endif
     int16_t armp, aholdp;        /* P_AMODE / P_AHOLD as last seen by the ISR */
     /* engine switch (voice.c engine_block): the old engine's voices fade out, then it switches */

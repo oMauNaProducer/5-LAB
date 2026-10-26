@@ -714,7 +714,7 @@ static int proj_pack_trk(uint8_t *b, uint32_t *posp, const proj_trk_t *tr)
                                                      * velocity 0..127, accents */
         b[pos++] = (uint8_t)(s->n | s->time << 3 | (s->flags & 3u) << 5);   /* only on hits */
         b[pos++] = (uint8_t)((s->vel > 127u ? 127u : s->vel) | (r & 1u) << 7); b[pos++] = s->hit;
-        b[pos++] = s->acc & s->hit;
+        b[pos++] = s->hit ? s->acc & s->hit : s->acc;          /* (1.2.0: a melodic step's acc byte is its LONG note) */
         b[pos++] = (uint8_t)(s->probability | (r >> 1) << 7);
     }
     *posp = pos;
@@ -743,7 +743,7 @@ static int proj_unpack_trk(proj_trk_t *d, const uint8_t *b, uint32_t *posp, uint
         s->hit = b[pos++]; s->acc = b[pos++];
         s->probability = b[pos] & 127u; meta |= (b[pos++] & 128u) << 2;   /* (bit 1 at bit 9) */
         if ((meta & 255u) > 127u || s->n > 4u || s->time > ST_REST || s->probability >= COND_FIRST + NCOND) return 0;
-        if (s->acc & ~s->hit) return 0;
+        if (s->hit && (s->acc & ~s->hit)) return 0;
         step_set_ratchet(s, (meta >> 8) + 1u);
         step_set_nudge(s, (int32_t)(nd ^ 8u) - 8);
     }
@@ -1016,7 +1016,7 @@ static void proj_steps(step_t *s)            /* a loaded sequence stays inside i
         if (s[i].n > 4u) s[i].n = 4;
         if (s[i].time > ST_REST) s[i].time = ST_REST;
         for (j = 0; j < 4u; j++) s[i].note[j] &= 127u;
-        s[i].acc &= s[i].hit;
+        if (s[i].hit) s[i].acc &= s[i].hit;
     }
 }
 

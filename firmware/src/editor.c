@@ -327,8 +327,8 @@ static void ed_step_reply(const step_t *st)              /* the same 15 bytes */
     ed_b(st->flags & (SF_ACCENT | SF_SLIDE));
     ed_b(st->vel);
     ed_b(st->hit & 0x7Fu);
-    ed_b(st->acc & 0x7Fu);
-    ed_b((uint32_t)(st->hit >> 7) | (uint32_t)(st->acc >> 7) << 1);
+    ed_b((st->hit ? st->acc : 0u) & 0x7Fu);
+    ed_b((uint32_t)(st->hit >> 7) | (uint32_t)((st->hit ? st->acc : 0u) >> 7) << 1);
     ed_b(step_chance(st));
     ed_b(step_ratchet(st));
     ed_b((uint32_t)(step_nudge(st) + 8));
