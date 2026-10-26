@@ -734,6 +734,53 @@ static uint32_t note_edit_all(track_t *t, uint32_t i, int32_t steps, const char 
     return note_len_all(t, i);
 }
 
+/* 1.1.4: KNOB 2 on an EMPTY step (a REST, a TIE) that a chord passes through (the TIEs of a NOTE step before, or a LONG note): the chord is cut here and goes on from
+ * this step as a chord of its own (its notes' remaining lengths, LONG notes), what KNOB 2 then moves is that chord, as at the chord's first step. Returns the notes it made (0: nothing
+ * passes this step) */
+static uint32_t note_split_at(track_t *t, uint32_t i)
+{
+    uint32_t len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP), j, k, n = 0, m;
+    uint8_t pit[4], org[4], ok[4], rem[4];
+    step_t head, *s;
+    if (i >= len || t->step[i].n || t->step[i].hit)
+        return 0;
+    for (j = i; j-- > 0 && n < 4u;)
+        if (t->step[j].time == ST_NOTE && !t->step[j].hit)
+            for (k = 0; k < t->step[j].n && k < 4u && n < 4u; k++) {
+                uint32_t l = note_len_eff(t, j, k);
+                if (j + l > i) {
+                    pit[n] = t->step[j].note[k]; org[n] = (uint8_t)j; ok[n] = (uint8_t)k; rem[n] = (uint8_t)(j + l - i);
+                    n++;
+                }
+            }
+    if (!n)
+        return 0;
+    head = t->step[org[0]];
+    for (m = 0; m < n; m++) {                         /* each note ends where the cursor starts */
+        step_t *o = &t->step[org[m]];
+        uint32_t w = i - org[m];
+        if (step_ext_code(o, ok[m])) {
+            step_ext_set(o, ok[m], w);
+            if (w < 2u)
+                note_set_len_k(t, org[m], ok[m], 1u);
+        } else
+            note_set_len_k(t, org[m], ok[m], w);
+    }
+    s = &t->step[i];
+    step_clear(s);
+    s->vel = head.vel;
+    s->flags = (uint8_t)(head.flags & (SF_ACCENT | SF_SLIDE));
+    s->time = ST_NOTE;
+    s->n = (uint8_t)n;
+    for (m = 0; m < n; m++)
+        s->note[m] = pit[m];
+    for (m = 0; m < n; m++)
+        if (rem[m] > 1u) {
+            step_ext_set(s, m, rem[m]);
+            note_absorb(t, i, m, rem[m]);
+        }
+    return n;
+}
 /* the note of step st a key held on the selected track plays (its index in st->note), -1: none (1.1.0: KNOB 3 on a held note) */
 static int held_note_idx(const step_t *st)
 {

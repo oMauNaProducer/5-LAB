@@ -432,6 +432,41 @@ static int long_64(void)
     bad += check("  a damaged block of before is refused, as ever", ok);
     return bad;
 }
+/* 1.1.4: KNOB 2 on an empty step inside a long chord cuts it there and moves it as a chord */
+static int split_k2(void)
+{
+    int bad = 0, ok;
+    track_t *t = chord3();
+    uint32_t i, n;
+    const char *m;
+    t->p[P_SLEN] = 32;
+    for (i = 0; i < 32u; i++) { memset(&t->step[i], 0, sizeof t->step[i]); t->step[i].time = ST_REST; }
+    t->step[0] = (step_t){{60, 64, 67}, 3, ST_NOTE, 0, 0};
+    for (i = 0; i < 3u; i++)
+        for (n = 0; n < 40u; n++) note_edit_k(t, 0, i, 1, &m);       /* to the end, as LONG notes */
+    ui.cursor = 12;
+    step_edit(1, 2);
+    ok = t->step[12].n == 3 && t->step[12].time == ST_NOTE && t->step[12].note[0] == 62 && t->step[12].note[1] == 66 && t->step[12].note[2] == 69 &&
+         note_len_eff(t, 12, 0) == 20 && note_len_eff(t, 12, 2) == 20 && note_len_eff(t, 0, 0) == 12 && note_len_eff(t, 0, 2) == 12;
+    bad += check("split: K2 in the middle of a long chord (LONG): cut there, the chord moves whole, to the end", ok);
+    step_edit(1, -1);
+    ok = t->step[12].note[0] == 61 && t->step[12].n == 3 && note_len_eff(t, 12, 1) == 20;
+    bad += check("  and goes on moving", ok);
+    /* the same with TIEs */
+    for (i = 0; i < 16u; i++) { memset(&t->step[i], 0, sizeof t->step[i]); t->step[i].time = ST_REST; }
+    t->step[0] = (step_t){{60, 64}, 2, ST_NOTE, 0, 0};
+    for (i = 1; i < 8u; i++) t->step[i] = (step_t){{0}, 0, ST_TIE, 0, 0};
+    ui.cursor = 4;
+    step_edit(1, 1);
+    ok = t->step[4].n == 2 && t->step[4].note[0] == 61 && t->step[4].note[1] == 65 && note_len_eff(t, 4, 0) == 4 && note_len_eff(t, 0, 0) == 4 &&
+         t->step[8].time != ST_TIE && t->step[7].time != ST_TIE;
+    bad += check("split: the same on TIEs: the first part 4 steps, the chord from step 5 moved", ok);
+    ui.cursor = 20;
+    step_edit(1, 1);
+    ok = t->step[20].n == 1 && t->step[20].time == ST_NOTE;
+    bad += check("split: nothing passes: a new note as ever", ok);
+    return bad;
+}
 static int len_edit(void)
 {
     int bad = 0, ok;
@@ -503,6 +538,7 @@ int main(void)
     bad += long_roll();
     bad += long_project();
     bad += long_64();
+    bad += split_k2();
     bad += masks_fix();
     bad += roll_bars();
     puts(bad ? "notelen tests FAILED" : "notelen tests passed");

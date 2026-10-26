@@ -908,6 +908,12 @@ static void step_edit(uint32_t slot, int32_t steps)
         cursor_move(ui.cursor + steps);
         break;
     case 1:                                               /* NOTE: transpose the step */
+        if (!st->n && note_split_at(TSEL, ui.cursor)) {   /* (1.1.4: a chord passes here: cut, and it moves as a chord) */
+            for (i = 0; i < st->n; i++)
+                st->note[i] = (uint8_t)clamp(st->note[i] + steps, 1, 127);
+            last_note = st->note[0];
+            break;
+        }
         if (!st->n) {
             st->note[0] = last_note;
             st->n = 1;

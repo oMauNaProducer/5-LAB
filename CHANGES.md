@@ -19,6 +19,8 @@ Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything n
   The editor's backup takes both sizes.
 - **RAM.** About 2 KB more (a byte a step in about 2,000 steps kept: the 5 tracks, the project in RAM, the chain's sources, the undo) plus 5 x 200 bytes in the pool for the block
   copies (the first 1.1.4 build with 320 each left the pool 332 B short of the 8192 check). `build.py` checks the headroom (RAM 4096, pool 8192): not measured on the host.
+- **KNOB 2 inside a long chord.** On an empty step (REST or TIE) that a chord passes through, turning NOTE no longer makes a lone one-step note: the chord is **cut there**
+  (the first part ends before this step) and goes on from it as a chord of its own, with the notes' remaining lengths, and KNOB 2 moves that whole chord, as it does at its first step.
 - **Fix (since 1.1.3):** the notes 3 and 4 of a chord did not redraw the screen while their LEN was turned (only when the key was let go): the step hash that decides a redraw did not include `ext`.
 - Tests: `tests/notelen_test.c` (`len64`: a chord of 4 to step 63 on the 5 tracks, saved, loaded, and the 1280-byte block).
 
