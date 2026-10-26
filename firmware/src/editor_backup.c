@@ -122,15 +122,19 @@ static uint32_t ed_bk_commit(void)
         obj = OBJ_PROJ11_0 + ed_bk_id - 2u;         /* (FUN11: the project alone now; its fifth track's block follows as id 11..14) */
     } else if (ed_bk_id == 10u) {                   /* 5-LAB: the fifth track's half of the music restored with id 0 */
         if (!ed_bk_len) return 0;                   /* (none: the track stays at its power-on sound) */
-        if (ed_bk_len != PROJ5_SIZE) return 2;
+        if (ed_bk_len != PROJ5_SIZE && ed_bk_len != PROJ5_OLD) return 2;
         project_capture(&proj_scratch);
         if (!proj_unpack5(&proj_scratch, raw, ed_bk_link0)) return 2;
         proj_bound(&proj_scratch);
         return project_restore_runtime(&proj_scratch) ? 2u : 0u;
     } else if (ed_bk_id >= 11u && ed_bk_id <= 14u) {   /* .. and of a slot's: it must name the FUN10 now there */
-        if (ed_bk_len && (ed_bk_len != PROJ5_SIZE || ((const uint32_t *)raw)[0] != PROJ5_MAGIC ||
-                          ((const uint32_t *)raw)[2] != proj_link(&proj_slot[ed_bk_id - 11u]) ||
-                          ((const uint32_t *)raw)[PROJ5_SIZE / 4u - 1u] != proj_hash(raw, PROJ5_SIZE - 4u))) return 2;
+        if (ed_bk_len) {                            /* (1.1.4: a block of before ends at PROJ5_OLD: its hash is there, the rest is zero) */
+            uint32_t sz = ((const uint32_t *)raw)[1];
+            if ((ed_bk_len != PROJ5_SIZE && ed_bk_len != PROJ5_OLD) || (sz != PROJ5_SIZE && sz != PROJ5_OLD) || sz > ed_bk_len ||
+                ((const uint32_t *)raw)[0] != PROJ5_MAGIC || ((const uint32_t *)raw)[2] != proj_link(&proj_slot[ed_bk_id - 11u]) ||
+                ((const uint32_t *)raw)[sz / 4u - 1u] != proj_hash(raw, sz - 4u)) return 2;
+            if (ed_bk_len < PROJ5_SIZE) { memset(raw + ed_bk_len, 0, PROJ5_SIZE - ed_bk_len); ed_bk_len = PROJ5_SIZE; }
+        }
         obj = OBJ_PROJ11_0 + ed_bk_id - 11u;
     } else if (ed_bk_id == 1u) {
         const persist_t *p = (const persist_t *)raw;
@@ -216,7 +220,7 @@ static uint32_t ed_bk_write(const uint8_t *a, uint32_t n)
             (a[1] >= 2u && a[1] <= 5u && len && !proj_store_len(len)) ||
             ((a[1] == 6u || a[1] == 7u) && len && len != sizeof(up_bank_t)) ||
             (a[1] == 8u && len && len != sizeof(fm6_bank_t)) || (a[1] == 9u && len && len != sizeof(upf_t)) ||
-            (a[1] >= 10u && len && len != PROJ5_SIZE)) return 1;
+            (a[1] >= 10u && len && len != PROJ5_SIZE && len != PROJ5_OLD)) return 1;
         if (ed_flash_stop()) return 3;
         ed_bk_valid = 0; ed_bk_put = 1; ed_bk_id = a[1]; ed_bk_len = len; ed_bk_gen = ++proj_wire_gen;
         ed_bk_crc = ed_bk_r32(a + 7); ed_bk_pos = 0;

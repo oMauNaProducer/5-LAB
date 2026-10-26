@@ -151,6 +151,7 @@ enum { ST_NOTE, ST_TIE, ST_REST };
 #define SF_SLIDE 2u
 #define SF_RATCH_SH 3u                   /* RATCH: the hits of a NOTE step - 1 (0..3: x1..x4, seq.c seq_ratchet); */
 #define SF_RATCH (3u << SF_RATCH_SH)     /* bits 3..4, so a user preset's pattern (flag 4 = tie) carries it too */
+#define NLNG 8                   /* 1.1.4: LONG notes sounding on a track at once (seq.c seq_lng_*) */
 #define NLANE 8                  /* drum lanes of a step (the DRUM engine's: eng_drum.c DRUM_LANE_NOTE) */
 typedef struct {                 /* acid-style step: up to 4 notes (POLY), time, accent, slide; drum hits */
     uint8_t note[4];
@@ -163,22 +164,29 @@ typedef struct {                 /* acid-style step: up to 4 notes (POLY), time,
     uint8_t acc;                 /* bit l: that hit is accented (velocity 127); with hit == 0: the LONG notes 0 and 1 (below) */
     uint8_t probability;         /* 0 = legacy 100%; 1..100 = percent, 101 = silent; 1.5.5: 102..112 a condition */
     uint8_t ext;                 /* 1.1.3: with hit == 0: the LONG notes 2 and 3 */
+    uint8_t ext2;                /* 1.1.4: with hit == 0: the high two bits of each LONG note's code (note k: bits 2k, 2k+1) */
 } step_t;
 /* 5-LAB 1.1.0: a chord's notes with lengths of their own. A TIE step's vel (unused on a TIE) = 0x10 | mask: bit k of the mask = note k of the
  * NOTE step the TIEs follow ended before this TIE (seq.c, ui.c note_set_len_k). Any other vel (0, a project of before, a REST's 96 ...) is: all go on */
 static inline uint32_t tie_mask(const step_t *s) { return s->time == ST_TIE && (s->vel & 0x70u) == 0x10u ? (uint32_t)s->vel & 15u : 0u; }
-/* 5-LAB 1.1.3: LONG notes. Each note of a NOTE step (not a drum step: no hits) may last past the notes of the steps after it, for a number of steps of its
- * own: a 4-bit code a note, notes 0 and 1 in the step's `acc` byte (low, high nibble), notes 2 and 3 in `ext` (both free while hit == 0): 0 none, 1..14 the
- * length in steps, EXT_END (15) up to the end of the pattern. Saved with the step (project.c) and moved by every tool that copies steps whole */
-#define EXT_END 15u
-#define EXT_MAX 14u
+/* 5-LAB 1.1.3/1.1.4: LONG notes. Each note of a NOTE step (not a drum step: no hits) may last past the notes of the steps after it, for a number of steps of its
+ * own, 2..64 (EXT_END: as many as the pattern has left). Stored as a 6-bit value a note, length - 1 (0: none): the low 4 bits for notes 0 and 1 in the
+ * step's `acc` byte (low, high nibble), for notes 2 and 3 in `ext`, the high 2 bits of every note in `ext2` (all free while hit == 0). step_ext_code
+ * gives the length (0: none; a length of 1 is no LONG note), step_ext_set takes it. 1.1.3 stored 4 bits (1..14, 15 = the end): its projects open with
+ * those values (a code c is c + 1 steps now). Saved with the step (project.c) and moved by every tool that copies steps whole */
+#define EXT_END 64u
+#define EXT_MAX 63u
 static inline uint32_t step_ext_code(const step_t *s, uint32_t k)
 {
-    return !s->hit && s->time == ST_NOTE && k < s->n ? (uint32_t)((k < 2u ? s->acc : s->ext) >> ((k & 1u) * 4u)) & 15u : 0u;
+    uint32_t v;
+    if (s->hit || s->time != ST_NOTE || k >= s->n)
+        return 0u;
+    v = ((uint32_t)((k < 2u ? s->acc : s->ext) >> ((k & 1u) * 4u)) & 15u) | ((uint32_t)(s->ext2 >> (2u * k)) & 3u) << 4;
+    return v ? v + 1u : 0u;
 }
-static inline void step_ext_set(step_t *s, uint32_t k, uint32_t code)
+static inline void step_ext_set(step_t *s, uint32_t k, uint32_t len)
 {
-    uint32_t sh = (k & 1u) * 4u, v;
+    uint32_t sh = (k & 1u) * 4u, v, code = len < 2u ? 0u : (len > EXT_END ? EXT_END : len) - 1u;
     if (s->hit || k > 3u)
         return;
     v = ((k < 2u ? s->acc : s->ext) & ~(15u << sh)) | ((code & 15u) << sh);
@@ -186,6 +194,7 @@ static inline void step_ext_set(step_t *s, uint32_t k, uint32_t code)
         s->acc = (uint8_t)v;
     else
         s->ext = (uint8_t)v;
+    s->ext2 = (uint8_t)((s->ext2 & ~(3u << (2u * k))) | ((code >> 4) & 3u) << (2u * k));
 }
 static inline uint32_t step_ext_any(const step_t *s)
 {
@@ -195,7 +204,7 @@ static inline uint32_t step_ext_any(const step_t *s)
             return 1u;
     return 0u;
 }
-static inline void step_ext_clear(step_t *s) { if (!s->hit) s->acc = 0; s->ext = 0; }
+static inline void step_ext_clear(step_t *s) { if (!s->hit) s->acc = 0; s->ext = 0; s->ext2 = 0; }
 /* note j of the step is taken out (j >= 4: the chord is new): the codes above it move down */
 static inline void step_ext_remove(step_t *s, uint32_t j)
 {
@@ -334,8 +343,8 @@ typedef struct track {
     uint8_t seq_n;
     uint8_t seq_hold;            /* last step slides: keep the notes until the next step */
     uint8_t seq_hp[4];           /* 1.1.0: the pitch each note of the playing step sounds (0 none), seq_rel the notes ending at the end of this step (a bit */
-    uint8_t lng_p[4], lng_left[4];   /* 1.1.3: LONG notes sounding (seq.c seq_lng_*): pitch (0 free), steps still to start before its last one */
-    uint32_t lng_off[4];            /* .. samples to its note-off once in its last step */
+    uint8_t lng_p[NLNG], lng_left[NLNG];   /* 1.1.3: LONG notes sounding (seq.c seq_lng_*): pitch (0 free), steps still to start before its last one */
+    uint32_t lng_off[NLNG];          /* .. samples to its note-off once in its last step */
     uint8_t seq_rel, seq_gone;   /* a note of the step: its TIEs' note mask), seq_gone those released already (seq.c seq_part_release) */
     uint8_t slide_glide;         /* next legato note glides (slide) */
     uint8_t rat_left;            /* RATCH: repeats of the playing step still to come (seq.c seq_ratchet) */
@@ -373,9 +382,9 @@ typedef struct track {
     uint8_t lfo_wrap;            /* the LFO's phase wrapped this block: its S&H is drawn after the parts (voice.c) */
     uint32_t esync_k[3];         /* ATK's step, DEC's and REL's coefficient (Q16) this block (voice.c esync_coef) */
     uint8_t spread_on;           /* SPREAD this block (fx.c mix_part, voice.c track_render) */
-    uint8_t rsv_sz[4];          /* (sizeof(track_t) a multiple of 16: below) */
+    uint8_t rsv_sz[12];          /* (sizeof(track_t) a multiple of 16: below) */
 #else
-    uint8_t rsv_sz[2];          /* (sizeof(track_t) a multiple of 16: below) */
+    uint8_t rsv_sz[10];          /* (sizeof(track_t) a multiple of 16: below) */
 #endif
     int16_t armp, aholdp;        /* P_AMODE / P_AHOLD as last seen by the ISR */
     /* engine switch (voice.c engine_block): the old engine's voices fade out, then it switches */

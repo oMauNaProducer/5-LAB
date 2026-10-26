@@ -493,7 +493,7 @@ static void rec_note(track_t *t, uint32_t note, uint32_t vel)
     if (drum_track(t)) {                            /* DRUM: into the grid, no holds (hits) */
         uint32_t l = drum_lane(note);
         if (s->time != ST_NOTE || (!s->n && !s->hit)) {
-            s->n = s->hit = s->acc = s->ext = 0;
+            s->n = s->hit = s->acc = s->ext = s->ext2 = 0;
             s->flags = 0;
             s->vel = 0;
             step_set_nudge(s, off);
@@ -639,7 +639,7 @@ static void rec_hold(track_t *t, uint32_t idx, uint32_t len)
     s->time = ST_TIE;
     s->flags = 0;
     s->vel = tie_vel(t->rh_gone);                   /* (1.1.3: the notes let go before it end here) */
-    s->hit = s->acc = s->ext = 0;
+    s->hit = s->acc = s->ext = s->ext2 = 0;
 }
 
 /* a key of a recorded note is up: the hold ends with the last one */
@@ -966,7 +966,7 @@ static __attribute__((noinline)) void seq_part_release(track_t *t)
 static void seq_lng_release_all(track_t *t)
 {
     uint32_t i;
-    for (i = 0; i < 4u; i++)
+    for (i = 0; i < NLNG; i++)
         if (t->lng_p[i]) {
             trk_note_off(t, t->lng_p[i]);
             t->lng_p[i] = 0;
@@ -975,7 +975,7 @@ static void seq_lng_release_all(track_t *t)
 static void seq_lng_drop(track_t *t, uint32_t pitch)            /* the pitch plays again: the long one before it ends */
 {
     uint32_t i;
-    for (i = 0; i < 4u; i++)
+    for (i = 0; i < NLNG; i++)
         if (t->lng_p[i] == pitch) {
             trk_note_off(t, pitch);
             t->lng_p[i] = 0;
@@ -984,19 +984,19 @@ static void seq_lng_drop(track_t *t, uint32_t pitch)            /* the pitch pla
 static void seq_lng_step(track_t *t, uint32_t gate)             /* a step starts (not a repeat): the long notes come a step nearer their end */
 {
     uint32_t i;
-    for (i = 0; i < 4u; i++)
+    for (i = 0; i < NLNG; i++)
         if (t->lng_p[i] && t->lng_left[i] && !--t->lng_left[i])
             t->lng_off[i] = gate;
 }
 static void seq_lng_add(track_t *t, uint32_t pitch, uint32_t steps, uint32_t gate)
 {
-    uint32_t i, j = 4u;
-    for (i = 0; i < 4u; i++)
+    uint32_t i, j = NLNG;
+    for (i = 0; i < NLNG; i++)
         if (!t->lng_p[i]) {
             j = i;
             break;
         }
-    if (j == 4u) {                                   /* all four busy: the first one ends */
+    if (j == NLNG) {                                   /* all busy: the first one ends */
         j = 0;
         trk_note_off(t, t->lng_p[0]);
     }
@@ -1007,7 +1007,7 @@ static void seq_lng_add(track_t *t, uint32_t pitch, uint32_t steps, uint32_t gat
 static void seq_lng_tick(track_t *t, uint32_t n)
 {
     uint32_t i;
-    for (i = 0; i < 4u; i++)
+    for (i = 0; i < NLNG; i++)
         if (t->lng_p[i] && !t->lng_left[i]) {
             if (t->lng_off[i] <= n) {
                 trk_note_off(t, t->lng_p[i]);

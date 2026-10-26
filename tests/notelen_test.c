@@ -239,20 +239,23 @@ static int long_edit(void)
     ok = n == 14 && step_ext_code(&t->step[0], 0) == 14;
     bad += check("  on to 14", ok);
     n = note_edit_k(t, 0, 0, 1, &m);
+    ok = n == 15 && step_ext_code(&t->step[0], 0) == 15;
+    bad += check("  past 14: 15 (1.1.4: no jump to the end)", ok);
+    n = note_edit_k(t, 0, 0, 1, &m);
     ok = n == 16 && step_ext_code(&t->step[0], 0) == EXT_END;
-    bad += check("  past 14: END, the end of the pattern", ok);
+    bad += check("  16: END, the end of the pattern", ok);
     n = note_edit_k(t, 0, 0, 1, &m);
     ok = n == 16 && m && !strcmp(m, "END OF PATTERN");
     bad += check("  and 'END OF PATTERN' past it", ok);
     n = note_edit_k(t, 0, 0, -1, &m);
-    ok = n == 14 && step_ext_code(&t->step[0], 0) == 14;
-    bad += check("  one down from END: 14", ok);
+    ok = n == 15 && step_ext_code(&t->step[0], 0) == 15;
+    bad += check("  one down from END: 15", ok);
     for (i = 0; i < 13u; i++) n = note_edit_k(t, 0, 0, -1, &m);
-    ok = n == 1 && step_ext_code(&t->step[0], 0) == 1;
-    bad += check("  down to 1", ok);
+    ok = n == 2 && step_ext_code(&t->step[0], 0) == 2;
+    bad += check("  down to 2", ok);
     n = note_edit_k(t, 0, 0, -1, &m);
     ok = !step_ext_any(&t->step[0]) && m && !strcmp(m, "LONG NOTE OFF");
-    bad += check("  below 1: the LONG note is off (back to its TIEs)", ok);
+    bad += check("  below 2: the LONG note is off (back to its TIEs)", ok);
 
     /* a chord of three and a note on step 10: each note goes to the end on its own, held or not */
     clear16(t);
@@ -369,6 +372,66 @@ static int long_project(void)
     bad += check("  a drum hit's accent too", t->step[5].hit == 1 && t->step[5].acc == 1);
     return bad;
 }
+/* 1.1.4: a length of 1..64 a note: a chord of four from step 1 to step 63 on every track, saved and loaded, and the 1.1.3 block */
+static int long_64(void)
+{
+    int bad = 0, ok = 1;
+    uint32_t i, k, tk, n;
+    const char *m;
+    track_t *t = chord3();
+    project_store_t main_raw;
+    proj5_store_t b5, old5;
+    uint32_t sz, sum;
+    for (tk = 0; tk < 5u; tk++) {
+        t = &trk[tk];
+        t->p[P_SLEN] = 64;
+        for (i = 0; i < 64u; i++) { memset(&t->step[i], 0, sizeof t->step[i]); t->step[i].time = ST_REST; }
+        t->step[0] = (step_t){{60, 64, 67, 71}, 4, ST_NOTE, 0, 0};
+        t->step[10] = (step_t){{72}, 1, ST_NOTE, 0, 0};
+        for (k = 0; k < 4u; k++) {
+            for (i = 0; i < 62u; i++) n = note_edit_k(t, 0, k, 1, &m);
+            ok &= n == 63u && step_ext_code(&t->step[0], k) == 63u;
+        }
+        ok &= t->step[10].n == 1u && t->step[10].note[0] == 72;   /* (other pitches are not taken) */
+    }
+    bad += check("len64: a chord of 4 from step 1 to 63 on all 5 tracks (note by note)", ok);
+    t = &trk[0];
+    n = note_edit_k(t, 0, 2, 1, &m);
+    ok = n == 64u && step_ext_code(&t->step[0], 2) == EXT_END && step_ext_code(&t->step[0], 1) == 63u;
+    bad += check("  64 is the end, the others stay at 63", ok);
+    trk[1].step[0] = trk[0].step[0];
+    trk[4].step[0] = trk[0].step[0];
+    ok = proj_pack_pair(&main_raw, &b5, &proj_scratch) || 1;
+    project_capture(&proj_scratch);
+    ok = proj_pack_pair(&main_raw, &b5, &proj_scratch);
+    bad += check("  packs (the block 1600 bytes)", ok && sizeof b5 == 1600u);
+    for (tk = 0; tk < 5u; tk++)
+        for (i = 0; i < 64u; i++)
+            trk[tk].step[i].ext2 = 0;
+    memset(&proj_scratch, 0, sizeof proj_scratch);
+    ok = proj_import5(&proj_scratch, &main_raw, (int)sizeof main_raw, &b5);
+    for (tk = 0; tk < 5u; tk++) {
+        const step_t *st = &proj_scratch.t[tk].step[0];
+        ok &= (tk != 0 || (step_ext_code(st, 2) == EXT_END && step_ext_code(st, 1) == 63u)) &&
+              (tk != 1 || (step_ext_code(st, 0) == 63u && step_ext_code(st, 3) == 63u)) &&
+              (tk != 4 || step_ext_code(st, 3) == 63u);
+    }
+    bad += check("  saved and loaded: the high bits of tracks 1, 2 and 5 come back with the block", ok);
+    /* the block of 1.1.0 .. 1.1.3 (1280 bytes, its hash at 1276): opens, the high bits 0 */
+    memset(&old5, 0, sizeof old5);
+    memcpy(old5.raw, b5.raw, 1276u);
+    sz = 1280u; memcpy(old5.raw + 4, &sz, 4);
+    sum = proj_hash(old5.raw, 1276u); memcpy(old5.raw + 1276u, &sum, 4);
+    memset(&proj_scratch, 0, sizeof proj_scratch);
+    ok = proj_import5(&proj_scratch, &main_raw, (int)sizeof main_raw, &old5) &&
+         proj_scratch.t[4].step[0].n == 4 && step_ext_code(&proj_scratch.t[0].step[0], 2) == 16u;   /* (the 4 low bits only: 1111 + 1) */
+    bad += check("  a block of before (1280 bytes): loads, the high bits 0", ok);
+    old5.raw[100] ^= 1u;
+    memset(&proj_scratch, 0, sizeof proj_scratch);
+    ok = proj_import5(&proj_scratch, &main_raw, (int)sizeof main_raw, &old5) && proj_scratch.t[4].step[0].n != 4;
+    bad += check("  a damaged block of before is refused, as ever", ok);
+    return bad;
+}
 static int len_edit(void)
 {
     int bad = 0, ok;
@@ -439,6 +502,7 @@ int main(void)
     bad += long_absorb();
     bad += long_roll();
     bad += long_project();
+    bad += long_64();
     bad += masks_fix();
     bad += roll_bars();
     puts(bad ? "notelen tests FAILED" : "notelen tests passed");

@@ -184,7 +184,7 @@ static int st_load(uint32_t obj, void *dst, uint32_t max)
 
 /* a two-part object (5-LAB FUN11: the FUN10 record, then the fifth track's block) into a (alen bytes) and b (blen): the
  * object's length (alen + blen); 0 an empty record; -1 no valid copy at all (the caller may look at an older object);
- * -2 a record of another length (b is not touched then) */
+ * -2 a record of another length (b is not touched then; 1.1.4: b may hold less than blen, the rest of it zero) */
 static int st_load2(uint32_t obj, void *a, uint32_t alen, void *b, uint32_t blen)
 {
     st_hdr_t h;
@@ -193,10 +193,17 @@ static int st_load2(uint32_t obj, void *a, uint32_t alen, void *b, uint32_t blen
         return -1;
     if (h.len == 0u)
         return 0;
-    if (h.len != alen + blen)
+    if (blen ? (h.len <= alen || h.len > alen + blen) : h.len != alen)
         return -2;
-    if (st_pay_read(obj, (uint32_t)cur, 0, a, alen) || (blen && st_pay_read(obj, (uint32_t)cur, alen, b, blen)))
+    if (st_pay_read(obj, (uint32_t)cur, 0, a, alen))
         return -1;
+    if (blen) {                                       /* 1.1.4: b may be a shorter one (an older block): the rest of it is zero */
+        uint32_t got = h.len - alen, z;
+        for (z = got; z < blen; z++)
+            ((uint8_t *)b)[z] = 0u;
+        if (got && st_pay_read(obj, (uint32_t)cur, alen, b, got))
+            return -1;
+    }
     return (int)h.len;
 }
 

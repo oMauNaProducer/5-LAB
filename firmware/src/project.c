@@ -334,7 +334,7 @@ static void proj_trk_from(proj_trk_t *d, const int16_t *p, uint32_t np, uint8_t 
         s->time = step[k].time > ST_REST ? ST_REST : step[k].time;
         s->flags = step[k].flags & 3u;          /* accent, slide: x1 (no RATCH then) */
         s->vel = step[k].vel;
-        s->hit = s->acc = s->ext = 0;
+        s->hit = s->acc = s->ext = s->ext2 = 0;
     }
 }
 
@@ -631,7 +631,7 @@ static int proj_import_old(project_t *q, const void *b, int n)
                     const step10_t *o = &v->t[i].step[k];     /* (field by field: step_t shares n and time in one byte since 1.1.3) */
                     step_t *dq = &q->t[i].step[k];
                     memcpy(dq->note, o->note, 4); dq->n = o->n > 4u ? 4u : o->n; dq->time = o->time > ST_REST ? ST_REST : o->time;   /* (bounded before they go in a 3 / 2 bit field) */ dq->flags = o->flags; dq->vel = o->vel;
-                    dq->hit = o->hit; dq->acc = o->acc; dq->probability = 0; dq->ext = 0;
+                    dq->hit = o->hit; dq->acc = o->acc; dq->probability = 0; dq->ext = dq->ext2 = 0;
                     q->t[i].step[k].flags &= 3u;       /* (x1: no RATCH then) */
                 }
             }
@@ -746,7 +746,7 @@ static int proj_unpack_trk(proj_trk_t *d, const uint8_t *b, uint32_t *posp, uint
         s->n = meta & 7u; s->time = (meta >> 3) & 3u; s->flags = (meta >> 5) & 3u;
         s->vel = b[pos] & 127u; meta |= (b[pos++] & 128u) << 1;      /* (RATCH bit 0 at bit 8 of meta) */
         s->hit = b[pos++]; s->acc = b[pos++];
-        s->ext = 0;
+        s->ext = s->ext2 = 0;
         if (xm) { s->ext = s->hit; s->hit = 0; }
         s->probability = b[pos] & 127u; meta |= (b[pos++] & 128u) << 2;   /* (bit 1 at bit 9) */
         if ((meta & 255u) > 127u || s->n > 4u || s->time > ST_REST || s->probability >= COND_FIRST + NCOND) return 0;
@@ -884,9 +884,11 @@ static int proj_unpack(project_t *q, const uint8_t *b, uint32_t st)
  * preset, 64 steps), its FM6 patch, its lane in the 16 sections (a slot each, as chain_row_t), the track's automation
  * (a count, then place within the track's 64 steps, id, value), and the hash. */
 #define PROJ5_MAGIC 0x41355446u                /* "FT5A" */
-#define PROJ5_SIZE 1280u
+#define PROJ5_OLD 1280u                        /* (1.0.0 .. 1.1.3: the block as it was) */
+#define PROJ5_SIZE 1600u                       /* 1.1.4: + the high bits of the LONG notes of the 5 tracks (a byte a step, from PROJ5_OLD - 4) */
 typedef union { uint32_t align; uint8_t raw[PROJ5_SIZE]; } proj5_store_t;
-_Static_assert(16u + 127u + 2u + NSTEP * 9u + 128u + 16u + 1u + 3u * 128u + 4u <= PROJ5_SIZE, "PROJ5 holds a track");
+_Static_assert(16u + 127u + 2u + NSTEP * 9u + 128u + 16u + 1u + 3u * 128u + 4u <= PROJ5_OLD, "PROJ5 holds a track");
+_Static_assert(PROJ5_OLD - 4u + 5u * NSTEP + 4u == PROJ5_SIZE, "PROJ5 holds the LONG notes' high bits");
 static uint32_t proj_link(const void *main_obj) { return ((const uint32_t *)main_obj)[PROJ_STORE_SIZE / 4u - 1u]; }
 static int proj_pack5(proj5_store_t *out, const project_t *q, uint32_t link)
 {
@@ -908,6 +910,8 @@ static int proj_pack5(proj5_store_t *out, const project_t *q, uint32_t link)
             b[pos++] = (uint8_t)(q->motion.event[i].place & 63u); b[pos++] = q->motion.event[i].param;
             b[pos++] = (uint8_t)q->motion.event[i].value; cnt++;
         }
+    for (i = 0; i < 5u * NSTEP; i++)                /* 1.1.4: the LONG notes' high bits (step_ext_code) */
+        b[PROJ5_OLD - 4u + i] = q->t[i / NSTEP].step[i % NSTEP].hit ? 0u : q->t[i / NSTEP].step[i % NSTEP].ext2;
     sum = proj_hash(b, PROJ5_SIZE - 4u); memcpy(b + PROJ5_SIZE - 4u, &sum, 4);
     return 1;
 }
@@ -921,8 +925,10 @@ static int proj_unpack5(project_t *q, const uint8_t *b, uint32_t link)
 {
     proj_trk_t tr; motion_store_t m; uint8_t lane[CHAIN_ROWS], fm[FM6_PACKED];
     uint32_t pos = 16u, i, magic, size, sum, lnk, np = b[12], cnt;
-    memcpy(&magic, b, 4); memcpy(&size, b + 4, 4); memcpy(&lnk, b + 8, 4); memcpy(&sum, b + PROJ5_SIZE - 4u, 4);
-    if (magic != PROJ5_MAGIC || size != PROJ5_SIZE || lnk != link || sum != proj_hash(b, PROJ5_SIZE - 4u) ||
+    memcpy(&magic, b, 4); memcpy(&size, b + 4, 4); memcpy(&lnk, b + 8, 4);
+    if (size != PROJ5_SIZE && size != PROJ5_OLD) return 0;      /* (a block of before 1.1.4 ends at PROJ5_OLD, without the high bits) */
+    memcpy(&sum, b + size - 4u, 4);
+    if (magic != PROJ5_MAGIC || lnk != link || sum != proj_hash(b, size - 4u) ||
         np < 8u || np > P_COUNT || b[13] >= MCH_N || b[14] > 1u || b[15] > 3u)
         return 0;
     memset(&tr, 0, sizeof tr);
@@ -948,6 +954,11 @@ static int proj_unpack5(project_t *q, const uint8_t *b, uint32_t link)
         return 0;
     }
     q->t[NTRK_DISK] = tr;
+    if (size == PROJ5_SIZE)
+        for (i = 0; i < 5u * NSTEP; i++) {
+            step_t *st = &q->t[i / NSTEP].step[i % NSTEP];
+            st->ext2 = st->hit ? 0u : b[PROJ5_OLD - 4u + i];
+        }
     memcpy(q->fm6[NTRK_DISK], fm, FM6_PACKED);
     q->mch[NTRK_DISK] = b[13];
     for (i = 0; i < CHAIN_ROWS; i++)
@@ -1023,7 +1034,7 @@ static void proj_steps(step_t *s)            /* a loaded sequence stays inside i
         if (s[i].n > 4u) s[i].n = 4;
         if (s[i].time > ST_REST) s[i].time = ST_REST;
         for (j = 0; j < 4u; j++) s[i].note[j] &= 127u;
-        if (s[i].hit) { s[i].acc &= s[i].hit; s[i].ext = 0; }
+        if (s[i].hit) { s[i].acc &= s[i].hit; s[i].ext = s[i].ext2 = 0; }
     }
 }
 
@@ -1066,7 +1077,7 @@ static int proj_flash_pair_load(uint32_t obj11, uint32_t obj0, int *have5)
         memset(&proj_wire5, 0, sizeof proj_wire5);
         return st_load(obj0, &proj_wire, sizeof proj_wire);
     }
-    if (r != (int)(sizeof proj_wire + sizeof proj_wire5)) {   /* empty (0) or of another length */
+    if (r != (int)(sizeof proj_wire + sizeof proj_wire5) && r != (int)(sizeof proj_wire + PROJ5_OLD)) {   /* empty (0) or of another length */
         memset(&proj_wire5, 0, sizeof proj_wire5);
         return r == 0 ? 0 : -1;
     }
@@ -1079,7 +1090,7 @@ static int proj_flash_pair_load(uint32_t obj11, uint32_t obj0, int *have5)
 static int proj_half_load(uint32_t obj11, uint32_t link, proj5_store_t *dst)
 {
     int r = st_load2(obj11, &proj_wire, sizeof proj_wire, dst, sizeof *dst);
-    if (r == (int)(sizeof proj_wire + sizeof *dst) && ((const uint32_t *)dst->raw)[0] == PROJ5_MAGIC &&
+    if ((r == (int)(sizeof proj_wire + sizeof *dst) || r == (int)(sizeof proj_wire + PROJ5_OLD)) && ((const uint32_t *)dst->raw)[0] == PROJ5_MAGIC &&
         ((const uint32_t *)dst->raw)[2] == link && proj_link(&proj_wire) == link)
         return 1;
     memset(dst, 0, sizeof *dst);
