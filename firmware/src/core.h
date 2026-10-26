@@ -363,8 +363,9 @@ typedef struct track {
     uint8_t rh_last;             /* the last of them; rh_bak: what it held (an early release puts it back) */
     step_t rh_bak;
     uint8_t rh_gone;             /* 1.1.3: bit k: note k of that step was let go (the TIEs written after it end it: tie_vel) */
-    uint8_t rl_n, rl_idx[4], rl_note[4], rl_len[4];   /* 1.1.3: recorded notes still held that a later step cut off from the hold above: the step
-                                  * they were recorded into, their pitch, the steps held so far (rec_hold grows the step's LONG note) */
+    uint8_t rl_n, rl_idx[4], rl_note[4], rl_len[4], rl_lim[4];   /* 1.1.3: recorded notes still held that a later step cut off from the hold above: the step
+                                  * they were recorded into, their pitch, the steps held so far (rec_hold grows the step's LONG note); rl_lim: 0, or the step a hold that went round the pattern's end began (1.1.4: it goes on
+                                  * from step 1 as a note of its own up to there), 0xFF: at the end, going round at the next step */
     /* mono */
     uint8_t mono_stack[8];
     uint8_t nmono;
@@ -382,9 +383,9 @@ typedef struct track {
     uint8_t lfo_wrap;            /* the LFO's phase wrapped this block: its S&H is drawn after the parts (voice.c) */
     uint32_t esync_k[3];         /* ATK's step, DEC's and REL's coefficient (Q16) this block (voice.c esync_coef) */
     uint8_t spread_on;           /* SPREAD this block (fx.c mix_part, voice.c track_render) */
-    uint8_t rsv_sz[12];          /* (sizeof(track_t) a multiple of 16: below) */
+    uint8_t rsv_sz[8];          /* (sizeof(track_t) a multiple of 16: below) */
 #else
-    uint8_t rsv_sz[10];          /* (sizeof(track_t) a multiple of 16: below) */
+    uint8_t rsv_sz[6];          /* (sizeof(track_t) a multiple of 16: below) */
 #endif
     int16_t armp, aholdp;        /* P_AMODE / P_AHOLD as last seen by the ISR */
     /* engine switch (voice.c engine_block): the old engine's voices fade out, then it switches */

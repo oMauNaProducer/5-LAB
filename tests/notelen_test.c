@@ -551,13 +551,52 @@ static int rec_hold_over(void)
     rec_at(t, 2, 0); rec_note(t, 72, 100);
     for (i = 3; i < 16u; i++) { rec_at(t, i, 0); rec_hold(t, i, 16); }
     for (i = 0; i < 4u; i++) { rec_at(t, i, 0); rec_hold(t, i, 16); }          /* all the way round */
-    ok = t->step[8].n == 2 && t->step[8].note[0] == 67 && t->step[8].note[1] == 71 && t->step[0].n == 2 && t->step[0].note[0] == 60 &&
-         note_len_eff(t, 2, 0) >= 12 && note_len_eff(t, 0, 0) == 6 && note_len_eff(t, 8, 0) == 4;
-    bad += check("rec hold: a note held over steps with notes: they stay, it goes on over them (LONG)", ok);
+    ok = t->step[8].n == 2 && t->step[8].note[0] == 67 && t->step[8].note[1] == 71 && t->step[0].n == 3 && t->step[0].note[0] == 60 &&
+         t->step[0].note[2] == 72 && note_len_eff(t, 2, 0) == 14 && note_len_eff(t, 0, 0) == 6 && note_len_eff(t, 8, 0) == 4;
+    bad += check("rec hold: a note held over steps with notes: they stay, it goes on over them (LONG) to the end", ok);
+    ok = step_ext_code(&t->step[0], 2) == 2 && t->rl_n == 0;
+    bad += check("  and round the end: it goes on from step 1 as a note of its own, up to where it began (steps 1, 2)", ok);
     rec_release(t, 72);
-    ok = t->step[8].n == 2 && t->step[0].n == 2 && step_ext_code(&t->step[2], 0) > 0;
-    bad += check("  and let go: nothing erased, its own length kept", ok);
+    ok = t->step[8].n == 2 && step_ext_code(&t->step[2], 0) > 0;
+    bad += check("  and let go: nothing erased", ok);
+    /* released before it gets round: only to the end */
+    clear16(t);
+    t->step[8] = (step_t){{67}, 1, ST_NOTE, 0, 0};
+    rec_at(t, 4, 0); rec_note(t, 72, 100);
+    for (i = 5; i < 16u; i++) { rec_at(t, i, 0); rec_hold(t, i, 16); }
+    rec_at(t, 0, 0); rec_hold(t, 0, 16);
+    rec_at(t, 1, 0); rec_hold(t, 1, 16);
+    rec_release(t, 72);
+    ok = t->step[0].n == 1 && t->step[0].note[0] == 72 && t->step[8].n == 1 && step_ext_code(&t->step[4], 0) == EXT_END;
+    bad += check("rec hold: held round the end, let go in step 2: step 1 has it (2 steps), the first part to the end", ok);
     song.rec = 0; song.playing = 0;
+    return bad;
+}
+/* 1.1.4: a note recorded into a chord of TIEs that sounds: the chord's notes go on sounding (they are LONG notes now), they do not stop */
+static int rec_over_sound(void)
+{
+    int bad = 0, ok;
+    track_t *t = chord3();
+    uint32_t ss = div_samples(2), m = 3u * CTL, i;
+    clear16(t);
+    t->step[0] = (step_t){{60, 64}, 2, ST_NOTE, 0, 0};
+    for (i = 1; i < 8u; i++) t->step[i] = (step_t){{0}, 0, ST_TIE, 0, 0};
+    seq_start(); pos = 0;
+    run_to(t, 2u * ss + m);
+    ok = sounding(t, 60) && sounding(t, 64);
+    song.rec = 1;
+    rec_note(t, 72, 100);
+    rec_release(t, 72);
+    ok &= lng_has(t, 60) && lng_has(t, 64) && !sounding(t, 60);
+    bad += check("rec over: a note into a chord's TIEs while it sounds: the chord's notes are LONG notes now, still on", ok);
+    run_to(t, 4u * ss + m);
+    ok = lng_has(t, 60) && lng_has(t, 64);
+    bad += check("  and on at the next steps (not released by them)", ok);
+    run_to(t, 8u * ss + m);
+    ok = !lng_has(t, 60) && !lng_has(t, 64);
+    bad += check("  off where the chord ended (step 8)", ok);
+    song.rec = 0;
+    seq_stop();
     return bad;
 }
 static int len_edit(void)
@@ -634,6 +673,7 @@ int main(void)
     bad += split_k2();
     bad += rec_add();
     bad += rec_hold_over();
+    bad += rec_over_sound();
     bad += masks_fix();
     bad += roll_bars();
     puts(bad ? "notelen tests FAILED" : "notelen tests passed");

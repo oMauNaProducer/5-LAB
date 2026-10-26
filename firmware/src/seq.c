@@ -216,6 +216,7 @@ static void arp_remove(track_t *t, uint32_t note)
 
 #define ND_NONE 0u                      /* track_t nd_late / nd_early: nothing latched (seq_tick; else its seq_pos + 1) */
 static void rec_note(track_t *t, uint32_t note, uint32_t vel);
+static void seq_adopt_long(track_t *t, uint32_t note, uint32_t steps);
 static void tie_masks_fix(track_t *t, uint32_t idx, uint32_t j);
 static void rec_release(track_t *t, uint32_t note);
 static void rec_long_start(track_t *t, uint32_t len);
@@ -643,8 +644,11 @@ static void note_longify_at(track_t *t, uint32_t i)
     for (k = 0; k < h->n && k < 4u; k++)
         l[k] = note_len_eff(t, j, k);
     for (k = 0; k < h->n && k < 4u; k++)
-        if (!step_ext_code(h, k) && l[k] > 1u)
+        if (!step_ext_code(h, k) && l[k] > 1u) {
             step_ext_set(h, k, l[k]);
+            if (song.playing && t->seq_n && (t->seq_idx % NSTEP) >= j && j + l[k] > (t->seq_idx % NSTEP))
+                seq_adopt_long(t, h->note[k], j + l[k] - (t->seq_idx % NSTEP));   /* (it sounds: the long-note keeper takes it over, no TIE holds it now) */
+        }
     for (k = 1; k < n; k++) {
         step_clear(&t->step[j + k]);
         t->step[j + k].time = ST_REST;
@@ -782,6 +786,7 @@ static void rec_long_drop(track_t *t, uint32_t i)
         t->rl_idx[i] = t->rl_idx[i + 1u];
         t->rl_note[i] = t->rl_note[i + 1u];
         t->rl_len[i] = t->rl_len[i + 1u];
+        t->rl_lim[i] = t->rl_lim[i + 1u];
     }
 }
 /* a note recorded into another step cuts the hold of the step before: the notes of it still held go on as LONG notes (four at most on a track) */
@@ -797,27 +802,83 @@ static void rec_long_start(track_t *t, uint32_t len)
                 t->rl_idx[t->rl_n] = t->rh_start;
                 t->rl_note[t->rl_n] = t->rh_note[j];
                 t->rl_len[t->rl_n] = (uint8_t)(t->rh_ties + 1u);
+                t->rl_lim[t->rl_n] = 0;
                 rec_long_set(t, t->rl_n, len);
                 t->rl_n++;
                 break;
             }
 }
 
+/* 1.1.4: hold i of rl_* reached the pattern's end with its key still down: it goes on from step 1 as a note of its own (its pitch added to step 1, as long
+ * as it is held, up to the step it began in), so it does not stop at the end of the pattern. 0: step 1 cannot take it */
+static int rec_wrap_start(track_t *t, uint32_t i)
+{
+    step_t *s = &t->step[0], *o = &t->step[t->rl_idx[i] % NSTEP];
+    uint32_t k, note = t->rl_note[i];
+    if (s->time == ST_TIE || s->time == ST_REST || !s->n) {
+        if (s->hit)
+            return 0;
+        step_clear(s);
+        s->time = ST_NOTE;
+        s->n = 1;
+        s->note[0] = (uint8_t)note;
+        s->vel = o->vel;
+        s->flags = (uint8_t)(o->flags & SF_ACCENT);
+    } else {
+        if (s->hit)
+            return 0;
+        for (k = 0; k < s->n && s->note[k] != note; k++)
+            ;
+        if (k == s->n) {
+            if (s->n >= 4u)
+                return 0;
+            s->note[s->n++] = (uint8_t)note;
+        }
+    }
+    t->rl_lim[i] = t->rl_idx[i];
+    t->rl_idx[i] = 0;
+    t->rl_len[i] = 1;
+    if (t->rskip_idx != 0u)
+        t->rskip_n = 0;
+    t->rskip_idx = 0;
+    if (t->rskip_n < 4u)
+        t->rskip[t->rskip_n++] = (uint8_t)note;     /* (it sounds already: the step must not trigger it again) */
+    return 1;
+}
 /* the sequencer enters step idx (before playing it): a recorded note still held ties into it */
 static void rec_hold(track_t *t, uint32_t idx, uint32_t len)
 {
     step_t *s;
     uint32_t k, i;
     for (i = 0; i < t->rl_n;) {                     /* 1.1.3: the LONG notes held grow a step */
-        if (!((song.rec >> trk_index(t)) & 1u) || t->rl_idx[i] == idx) {
-            rec_long_drop(t, i);                    /* disarmed, or all the way round the pattern */
+        if (!((song.rec >> trk_index(t)) & 1u)) {
+            rec_long_drop(t, i);                    /* disarmed */
+            continue;
+        }
+        if (t->rl_lim[i] == 0xFFu) {                /* 1.1.4: held to the pattern's end: it goes round, a note of step 1 up to where it began */
+            if (idx != 0u || !rec_wrap_start(t, i)) {
+                rec_long_drop(t, i);
+                continue;
+            }
+            if (t->rl_lim[i] <= 1u)
+                rec_long_drop(t, i);
+            else
+                i++;
+            continue;
+        }
+        if (!t->rl_lim[i] && t->rl_idx[i] == idx) {
+            rec_long_drop(t, i);                    /* all the way round the pattern */
             continue;
         }
         t->rl_len[i]++;
         rec_long_set(t, i, len);
-        if (t->rl_len[i] >= (len > t->rl_idx[i] ? len - t->rl_idx[i] : 1u))
-            rec_long_drop(t, i);                    /* up to the pattern's end: it is END now */
-        else
+        if (t->rl_lim[i] ? t->rl_len[i] >= t->rl_lim[i] : t->rl_len[i] >= (len > t->rl_idx[i] ? len - t->rl_idx[i] : 1u)) {
+            if (!t->rl_lim[i] && t->rl_idx[i] > 0u) {
+                t->rl_lim[i] = 0xFFu;               /* up to the pattern's end: it is END now, and goes round if the key is still down */
+                i++;
+            } else
+                rec_long_drop(t, i);
+        } else
             i++;
     }
     if (!t->rh_n)
@@ -1228,6 +1289,28 @@ static void seq_lng_tick(track_t *t, uint32_t n)
             } else
                 t->lng_off[i] -= n;
         }
+}
+/* 1.1.4: a note that sounds now, held by the TIEs of its chord, which became a LONG note: the sequencer's own list of what sounds (seq_notes: the next step ends it)
+ * hands it to the LONG notes (seq_lng_*), for the steps it still has from this one */
+static void seq_adopt_long(track_t *t, uint32_t note, uint32_t steps)
+{
+    const engine_t *e = ENGINES[eng_idx(t->eng_req)];
+    uint32_t qseq = t->p[P_QUANT] >= QN_SEQ && !(e->keys && e->keys(t, 0) >= 0), x = note, i, gate;
+    uint32_t period = div_samples((uint32_t)t->p[P_SDIV]);
+    if (qseq)
+        x = (uint32_t)clamp(scale_snap(t, (int32_t)x + (t->p[P_QUANT] == QN_SEQT ? t->p[P_TRANS] : 0)), 0, 127);
+    for (i = 0; i < t->seq_n && t->seq_notes[i] != x; i++)
+        ;
+    if (i >= t->seq_n)
+        return;
+    for (t->seq_n--; i < t->seq_n; i++)
+        t->seq_notes[i] = t->seq_notes[i + 1u];
+    memset(t->seq_hp, 0, sizeof t->seq_hp);
+    t->seq_rel = 0;
+    gate = period * (uint32_t)t->p[P_SGATE] / 128u;
+    if (steps <= 1u)
+        gate = gate > t->seq_pos ? gate - t->seq_pos : 1u;
+    seq_lng_add(t, x, steps, gate);
 }
 static void seq_release(track_t *t)
 {

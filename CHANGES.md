@@ -28,6 +28,10 @@ Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything n
   The list is PLAY, REC, QUANTIZE, RAMP, the LOCK / AUTO records by step, + ADD. Nothing stored changes (those fields live in the step), and EDIT / CLEAR on the page are as before.
 - **Holding a recorded note over other notes.** With REC + PLAY a key held through steps that hold notes no longer overwrites them with its TIEs (the held note erased the steps after it,
   and all of them in the loop): when the hold reaches a step with notes, the held note goes on as a LONG note over them.
+- **Held round the end.** A recorded note held through steps with notes, to the end of the pattern, goes on into the next loop as before: from step 1 as a note of its own (added to
+  step 1's chord), up to the step where it began, as long as the key is down.
+- **A chord's sound does not stop.** Adding a note into a chord made of TIEs while it plays turned the chord into LONG notes, and the notes that were sounding were released at the next step.
+  They now go to the LONG notes' keeper and sound to the end of their length.
 - **Fix (since 1.1.3):** the notes 3 and 4 of a chord did not redraw the screen while their LEN was turned (only when the key was let go): the step hash that decides a redraw did not include `ext`.
 - Tests: `tests/notelen_test.c` (`len64`: a chord of 4 to step 63 on the 5 tracks, saved, loaded, and the 1280-byte block).
 
