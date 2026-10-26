@@ -102,15 +102,16 @@ static int len_edit(void)
     ok = note_len(t, 1) == 4u && is_tie(&t->step[4]);
     ui.msg_t = 0;
     turn(EN_K3, 1);
-    ok &= note_len(t, 1) == 4u && msg_is("NOTE AHEAD") && !memcmp(&t->step[5], &ref[5], sizeof ref[5]);
-    bad += check("  it stops before the next note (NOTE AHEAD, that note kept)", ok);
+    ok &= note_len_all(t, 1) == 5u && step_ext_code(&t->step[1], 0) == 5u && step_ext_code(&t->step[1], 1) == 5u &&
+          !memcmp(&t->step[5], &ref[5], sizeof ref[5]);
+    bad += check("  1.1.3: past the next note the chord goes on as LONG notes (that note kept)", ok);
     turn(EN_K3, -1);
-    ok = note_len(t, 1) == 3u && is_rest(&t->step[4]);
+    ok = note_len_all(t, 1) == 4u && is_rest(&t->step[4]);
     for (i = 0; i < 6u; i++)
         turn(EN_K3, -1);
-    ok &= note_len(t, 1) == 1u && is_rest(&t->step[2]) && is_rest(&t->step[3]) && t->step[1].n == 2u &&
+    ok &= note_len_all(t, 1) == 1u && !step_ext_any(&t->step[1]) && is_rest(&t->step[2]) && is_rest(&t->step[3]) && t->step[1].n == 2u &&
           t->step[1].time == ST_NOTE;
-    bad += check("  left: its last TIEs become RESTs, down to LEN 1 (the note stays)", ok);
+    bad += check("  left: down to LEN 1 (the notes stay, no LONG note, no TIEs)", ok);
     hold(B_SAVE);                                    /* (the turns 1.5 s apart or less: one undo) */
     ok = !memcmp(t->step, ref, sizeof ref);
     hold(B_SAVE);
@@ -138,7 +139,7 @@ static int len_edit(void)
     t->step[4] = (step_t){{0}, 0, ST_REST, 0, 0, 1, 0, 0};    /* a REST keeping a hit: not overwritten */
     put(t, 3, 50, ST_NOTE);
     turn(EN_K3, 1);
-    ok &= note_len(t, 3) == 1u && step_ext_code(&t->step[3]) == 2u && t->step[4].hit == 1u;   /* (1.1.3: a lone note goes on over the step ahead as a LONG note) */
+    ok &= note_len(t, 3) == 1u && step_ext_code(&t->step[3], 0) == 2u && t->step[4].hit == 1u;   /* (1.1.3: a lone note goes on over the step ahead as a LONG note) */
     bad += check("  a REST / TIE / empty step: KNOB 3 TIME (NOTE TIE REST); a REST keeping notes or hits is kept", ok);
 
     ui_power_on();                                    /* the DRUM grid: KNOB 3 is still HIT */

@@ -557,7 +557,7 @@ static void step_clear(step_t *st)
     st->time = ST_REST;
     st->flags = 0;
     st->vel = 0;
-    st->hit = st->acc = 0;
+    st->hit = st->acc = st->ext = 0;
     st->probability = 0;
 }
 
@@ -629,14 +629,25 @@ static uint32_t note_set_len_k(track_t *t, uint32_t i, uint32_t k, uint32_t want
 static uint32_t note_len_eff(const track_t *t, uint32_t i, uint32_t k)
 {
     const step_t *s = &t->step[i];
-    uint32_t c = step_ext_code(s), len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP), room = len > i ? len - i : 1u;
-    if (c && step_ext_note(s) == k)
+    uint32_t c = step_ext_code(s, k), len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP), room = len > i ? len - i : 1u;
+    if (c)
         return c == EXT_END || c > room ? room : c;
     return note_len_k(t, i, k);
 }
+/* the longest of the chord's notes (what the whole chord is) */
+static uint32_t note_len_all(const track_t *t, uint32_t i)
+{
+    uint32_t k, m = 1, q;
+    for (k = 0; k < t->step[i].n && k < 4u; k++) {
+        q = note_len_eff(t, i, k);
+        if (q > m)
+            m = q;
+    }
+    return m;
+}
+static int held_note_idx(const step_t *st);
 /* 1.1.3: note k of step i now lasts n steps: the same pitch in the NOTE steps it reaches is taken over (taken out of them; a step left with
  * nothing becomes a REST, with the TIEs after it) instead of sounding again under it */
-static int held_note_idx(const step_t *st);
 static void note_absorb(track_t *t, uint32_t i, uint32_t k, uint32_t n)
 {
     uint32_t len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP), j, m, q;
@@ -668,46 +679,59 @@ static int note_target(const step_t *st)
     int h = st->n ? held_note_idx(st) : -1;
     return h >= 0 ? h : st->n == 1u ? 0 : -1;
 }
-/* KNOB 3 on a held note of the chord (steps: the turn): its TIEs while they can grow (up to the next note), then a LONG note that goes on
- * over the notes after it (one a step); down to 1 and below it the LONG note is off. msg: what stopped it. Returns the length it got */
+/* KNOB 3 on a note of the chord (steps: the turn): its TIEs while they can grow (up to the next note), then a LONG note that goes on over the
+ * notes after it (1..14 steps; past them END, the end of the pattern; back down from END to 14); below 1 the LONG note is off and the note is
+ * back to its TIEs. msg: what stopped it. Returns the length it got */
 static uint32_t note_edit_k(track_t *t, uint32_t i, uint32_t k, int32_t steps, const char **msg)
 {
     step_t *s = &t->step[i];
     uint32_t len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP), room = len > i ? len - i : 1u;
-    uint32_t was = note_len_eff(t, i, k), c = step_ext_code(s);
+    uint32_t was = note_len_eff(t, i, k), c = step_ext_code(s, k), w, code, n;
     int32_t want = (int32_t)was + steps;
     *msg = 0;
-    if (c && step_ext_note(s) == k) {                 /* a LONG note: its length */
-        if (want < 1) {
-            step_ext_set(s, 0, 0);
-            *msg = "LONG NOTE OFF";
-            return note_len_k(t, i, k);
+    if (!c) {                                         /* its TIEs first */
+        n = note_set_len_k(t, i, k, (uint32_t)clamp(want, 1, NSTEP));
+        if (steps <= 0 || n != was)
+            return n;
+        if (i + was >= len) {
+            *msg = "END OF PATTERN";
+            return n;
         }
-        if ((uint32_t)want >= room) {
-            if (steps > 0 && was >= room)
-                *msg = "END OF PATTERN";
-            want = (int32_t)room;
-        }
-        step_ext_set(s, k, (uint32_t)want >= room ? EXT_END : (uint32_t)want);
-        note_absorb(t, i, k, (uint32_t)want);
-        return (uint32_t)want;
+    } else if (want < 1) {
+        step_ext_set(s, k, 0);
+        *msg = "LONG NOTE OFF";
+        return note_len_k(t, i, k);
+    } else if (steps > 0 && was >= room) {
+        *msg = "END OF PATTERN";
+        return was;
     }
-    {
-        uint32_t n = note_set_len_k(t, i, k, (uint32_t)clamp(want, 1, NSTEP));
-        if (steps > 0 && n == was) {
-            if (i + was >= len) {
-                *msg = "END OF PATTERN";
-            } else if (c) {                           /* another note of the step is the long one */
-                *msg = "ONE LONG NOTE A STEP";
-            } else {                                  /* a note ahead stops the TIEs: the note goes on over it */
-                uint32_t w = (uint32_t)want;
-                step_ext_set(s, k, w >= room ? EXT_END : w);
-                note_absorb(t, i, k, w >= room ? room : w);
-                return w >= room ? room : w;
-            }
-        }
-        return n;
+    if (!c)
+        note_set_len_k(t, i, k, 1u);                  /* the note leaves the TIEs: they end it at once (off again: it is one step) */
+    w = (uint32_t)(want < 1 ? 1 : want);              /* a LONG note of w steps (a TIE note blocked by the next one comes here) */
+    code = w >= room || (w > EXT_MAX && steps > 0) ? EXT_END : w > EXT_MAX ? EXT_MAX : w;
+    step_ext_set(s, k, code);
+    n = code == EXT_END ? room : code;
+    note_absorb(t, i, k, n);
+    return n;
+}
+/* KNOB 3 on the whole chord: every note by the turn, each keeping its difference; the message of the last that had one */
+static uint32_t note_edit_all(track_t *t, uint32_t i, int32_t steps, const char **msg)
+{
+    uint32_t k, nn = t->step[i].n < 4u ? t->step[i].n : 4u, any = 0;
+    const char *m1;
+    *msg = 0;
+    for (k = 0; k < nn; k++) {
+        uint32_t was = note_len_eff(t, i, k), n = note_edit_k(t, i, k, steps, &m1);
+        if (n != was)
+            any = 1u;
+        else if (m1)
+            *msg = m1;
+        else if (!*msg)
+            *msg = 0;
     }
+    if (any)
+        *msg = 0;
+    return note_len_all(t, i);
 }
 
 /* the note of step st a key held on the selected track plays (its index in st->note), -1: none (1.1.0: KNOB 3 on a held note) */
@@ -1311,7 +1335,7 @@ static void load_pat16(track_t *t, const uint8_t *note, const uint8_t *flags)
         s->time = (fl & 4u) ? ST_TIE : n ? ST_NOTE : ST_REST;
         s->flags = n ? (fl & (SF_ACCENT | SF_SLIDE | SF_RATCH)) : 0;
         s->vel = n ? 96 : 0;
-        s->hit = s->acc = 0;
+        s->hit = s->acc = s->ext = 0;
         s->probability = 0;
         if (drum_track(t))                           /* a DRUM track: the lanes' notes as its grid */
             step_to_grid(s);

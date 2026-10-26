@@ -7,25 +7,26 @@ Five audio tracks, every engine on all five; the lab is for trying things out.
 Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything not listed here is Felucca 1.6.1 as it was
 (the sound is the same: the 98 golden renders of `tests/golden.txt` are unchanged).
 
-## 1.1.3: a note can last past the notes after it; live recording keeps each key's length
+## 1.1.3: each note of a chord has its own length, and a note can last past the notes after it
 
+- **Length per note, to the end.** On SEQ > STEP, **hold a note's key and turn KNOB 3 (LEN)**: only that note changes. Its TIEs grow first, up to the next note; one more turn
+  makes it a **LONG note** that goes on over the notes after it (1 .. 14 steps, then **END**: up to the end of the pattern, which follows LEN; back from END it goes to 14).
+  Below 1 the LONG note is off. **Every note of a chord can be long, each its own length** (four at most, the chord's size). A step with one note needs no key: KNOB 3 is that note.
+- **The whole chord.** With a chord and **no key held**, KNOB 3 moves **every note** by the turn (a 3-note chord gets 3 notes longer, each keeping its difference), passing the
+  notes after it like a single note does. A drum step (hits) keeps the TIE length it had.
 - **Stretching takes over the same note.** When a note is stretched over steps that hold the **same pitch**, those are taken over: the pitch goes out of them (a step left
   empty becomes a REST with its TIEs) instead of sounding again under the long one.
-- **A lone note needs no key.** With one note in the step, KNOB 3 (LEN) edits that note, long notes included; with a chord, hold the note's key (no key: the whole chord).
-
-
-- **LONG note.** A step's note can now last any number of steps **over the notes of the steps after it**: F on step 1 held to the end of the pattern while G
-  plays on step 8. On SEQ > STEP, **hold the note's key and turn KNOB 3 (LEN)**: the note's TIEs grow first, up to the next note, and one more turn makes it a LONG
-  note that goes on over it (1, 2 ... up to the end of the pattern, which is kept as "END": it follows LEN). Down below 1 the LONG note is off and the note is back
-  to its TIEs. **One LONG note a step** ("ONE LONG NOTE A STEP"); the other notes of the chord keep the 1.1.0 lengths (their TIEs).
 - **Sound.** A LONG note sounds from its step until the gate of its last step, outside the step-by-step release: the notes of the steps in between do not cut it,
-  and the same pitch played again by a later step ends it first. STOP ends it. A RATCH step plays its note as usual (no LONG note).
-- **Piano roll.** One bar from the note's step to its last, over the notes of the steps between; shown from earlier pages.
-- **Storage.** No new format: a LONG note is the step's `acc` byte (which only the DRUM lane hits use: a step with a hit has no LONG note), `note index << 6 | length`
-  (63 = END), saved with the step in FUN10 / PROJ5 and moved by every tool that copies steps (DOUBLE, HALF, copy, undo). A project from an older version loads as it was.
-- **Live recording.** A chord grows key by key: a note recorded into another step no longer cuts the note still held from the step before: that note goes on as a LONG note
-  as long as the key is held (one a step). A chord let go key by key keeps each note's length (1.1.0's TIE masks, written as the keys come up).
-- `track_t` grew for the LONG notes and the recording (its pad absorbed it: still a multiple of 16). Tests: `tests/notelen_test.c`.
+  and the same pitch played again by a later step ends it first. STOP ends it. A RATCH step plays its notes as usual (no LONG notes). Up to four LONG notes sound on a track.
+- **Piano roll.** One bar per note from its step to its last, over the notes of the steps between; shown from earlier pages. The notes of a chord that end earlier leave no bar over the TIEs.
+- **Storage.** No new flash format, no more RAM: a step's notes 0 and 1 keep their LONG code in the `acc` byte (low, high nibble) and notes 2 and 3 in a new `ext` byte, taking the
+  place that `n` and `time` shared (they are now bit fields of one byte: same size). Both only while the step has no drum hit. On flash the hit byte carries `ext` (bit 7 of the
+  step's flags byte says so). Codes: 0 none, 1..14 steps, 15 END. A project from an older version loads as it was; a lower length than 15 and below END is not possible for a
+  pattern longer than 16 (a note that long goes to END).
+- **TIE lengths (1.1.0).** A TIE step's `vel` is `0x10 | mask`: the notes of the NOTE step before it that ended before that TIE (any other `vel`: all go on).
+- **Live recording.** A chord grows key by key: a note recorded into another step no longer cuts the notes still held from the step before: they go on as LONG notes as long as
+  their keys are held. A chord let go key by key keeps each note's length (the TIE masks, written as the keys come up).
+- `track_t` grew for the LONG notes and the recording (its pad absorbed it: still a multiple of 16). `step_t` is the same size. Tests: `tests/notelen_test.c`.
 
 ## 1.1.0: each note of a chord has its own length
 

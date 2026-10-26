@@ -273,7 +273,7 @@ int main(void)
             for (uint32_t j = 0; j < 61u; j++) old.t[k].p[j] = q.t[k].p[j];
             for (uint32_t j = 0; j < 8u; j++) old.t[k].p[61u + j] = q.t[k].p[P_E0 + j];
             old.t[k].engine = q.t[k].engine; old.t[k].preset = q.t[k].preset;
-            for (uint32_t j = 0; j < NSTEP; j++) memcpy(&old.t[k].step[j], &q.t[k].step[j], sizeof(step10_t));
+            for (uint32_t j = 0; j < NSTEP; j++) STEP10_FROM(&old.t[k].step[j], &q.t[k].step[j]);
         }
         old.magic = PROJ_MAGIC_V5;
         old.size = sizeof old;

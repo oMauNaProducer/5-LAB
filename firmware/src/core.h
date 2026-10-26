@@ -154,27 +154,60 @@ enum { ST_NOTE, ST_TIE, ST_REST };
 #define NLANE 8                  /* drum lanes of a step (the DRUM engine's: eng_drum.c DRUM_LANE_NOTE) */
 typedef struct {                 /* acid-style step: up to 4 notes (POLY), time, accent, slide; drum hits */
     uint8_t note[4];
-    uint8_t n;                   /* notes in use, 0 = empty */
-    uint8_t time;                /* ST_NOTE / ST_TIE / ST_REST */
+    uint8_t n : 3;               /* notes in use, 0 = empty (1.1.3: n and time share a byte; the room goes to ext) */
+    uint8_t time : 2;            /* ST_NOTE / ST_TIE / ST_REST */
+    uint8_t : 3;
     uint8_t flags;               /* SF_ACCENT | SF_SLIDE | SF_RATCH */
     uint8_t vel;
     uint8_t hit;                 /* bit l: lane l hits (its GM note, on any engine): the DRUM grid */
-    uint8_t acc;                 /* bit l: that hit is accented (velocity 127) */
+    uint8_t acc;                 /* bit l: that hit is accented (velocity 127); with hit == 0: the LONG notes 0 and 1 (below) */
     uint8_t probability;         /* 0 = legacy 100%; 1..100 = percent, 101 = silent; 1.5.5: 102..112 a condition */
+    uint8_t ext;                 /* 1.1.3: with hit == 0: the LONG notes 2 and 3 */
 } step_t;
 /* 5-LAB 1.1.0: a chord's notes with lengths of their own. A TIE step's vel (unused on a TIE) = 0x10 | mask: bit k of the mask = note k of the
  * NOTE step the TIEs follow ended before this TIE (seq.c, ui.c note_set_len_k). Any other vel (0, a project of before, a REST's 96 ...) is: all go on */
 static inline uint32_t tie_mask(const step_t *s) { return s->time == ST_TIE && (s->vel & 0x70u) == 0x10u ? (uint32_t)s->vel & 15u : 0u; }
-/* 5-LAB 1.1.3: a LONG note. One note of a NOTE step (not a drum step: no hits) may last past the notes of the steps after it, for a number of steps of its
- * own: the step's `acc` byte (which only the lane hits use, so with hit == 0 it is free) holds note index k << 6 | code, code 1..62 the length in steps,
- * EXT_END (63) up to the end of the pattern; 0 none. It is saved with the step (project.c) and moves with it (every tool copies steps whole) */
-#define EXT_END 63u
-static inline uint32_t step_ext_code(const step_t *s)
+/* 5-LAB 1.1.3: LONG notes. Each note of a NOTE step (not a drum step: no hits) may last past the notes of the steps after it, for a number of steps of its
+ * own: a 4-bit code a note, notes 0 and 1 in the step's `acc` byte (low, high nibble), notes 2 and 3 in `ext` (both free while hit == 0): 0 none, 1..14 the
+ * length in steps, EXT_END (15) up to the end of the pattern. Saved with the step (project.c) and moved by every tool that copies steps whole */
+#define EXT_END 15u
+#define EXT_MAX 14u
+static inline uint32_t step_ext_code(const step_t *s, uint32_t k)
 {
-    return !s->hit && s->time == ST_NOTE && (s->acc & 63u) && (uint32_t)(s->acc >> 6) < s->n ? (uint32_t)s->acc & 63u : 0u;
+    return !s->hit && s->time == ST_NOTE && k < s->n ? (uint32_t)((k < 2u ? s->acc : s->ext) >> ((k & 1u) * 4u)) & 15u : 0u;
 }
-static inline uint32_t step_ext_note(const step_t *s) { return (uint32_t)s->acc >> 6; }
-static inline void step_ext_set(step_t *s, uint32_t k, uint32_t code) { if (!s->hit) s->acc = (uint8_t)(code ? k << 6 | (code & 63u) : 0u); }
+static inline void step_ext_set(step_t *s, uint32_t k, uint32_t code)
+{
+    uint32_t sh = (k & 1u) * 4u, v;
+    if (s->hit || k > 3u)
+        return;
+    v = ((k < 2u ? s->acc : s->ext) & ~(15u << sh)) | ((code & 15u) << sh);
+    if (k < 2u)
+        s->acc = (uint8_t)v;
+    else
+        s->ext = (uint8_t)v;
+}
+static inline uint32_t step_ext_any(const step_t *s)
+{
+    uint32_t k;
+    for (k = 0; k < 4u; k++)
+        if (step_ext_code(s, k))
+            return 1u;
+    return 0u;
+}
+static inline void step_ext_clear(step_t *s) { if (!s->hit) s->acc = 0; s->ext = 0; }
+/* note j of the step is taken out (j >= 4: the chord is new): the codes above it move down */
+static inline void step_ext_remove(step_t *s, uint32_t j)
+{
+    uint32_t k;
+    if (j >= 4u) {
+        step_ext_clear(s);
+        return;
+    }
+    for (k = j; k < 3u; k++)
+        step_ext_set(s, k, step_ext_code(s, k + 1u));
+    step_ext_set(s, 3, 0);
+}
 static inline uint8_t tie_vel(uint32_t m) { return (uint8_t)(m & 15u ? 0x10u | (m & 15u) : 0u); }
 typedef struct {                 /* a step as formats 1..4 (projects to FUN4) stored it: no hits */
     uint8_t note[4];

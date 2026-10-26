@@ -330,11 +330,11 @@ static void proj_trk_from(proj_trk_t *d, const int16_t *p, uint32_t np, uint8_t 
     for (k = 0; k < NSTEP; k++) {
         step_t *s = &d->step[k];
         memcpy(s->note, step[k].note, 4);
-        s->n = step[k].n;
-        s->time = step[k].time;
+        s->n = step[k].n > 4u ? 4u : step[k].n;     /* (bounded before they go in a 3 / 2 bit field: proj_steps would see a wrapped one) */
+        s->time = step[k].time > ST_REST ? ST_REST : step[k].time;
         s->flags = step[k].flags & 3u;          /* accent, slide: x1 (no RATCH then) */
         s->vel = step[k].vel;
-        s->hit = s->acc = 0;
+        s->hit = s->acc = s->ext = 0;
     }
 }
 
@@ -628,7 +628,10 @@ static int proj_import_old(project_t *q, const void *b, int n)
                 params_by_count(q->t[i].p, v->t[i].p, 69u, def);
                 q->t[i].engine = v->t[i].engine; q->t[i].preset = v->t[i].preset;
                 for (k = 0; k < NSTEP; k++) {
-                    memcpy(&q->t[i].step[k], &v->t[i].step[k], sizeof(step10_t));
+                    const step10_t *o = &v->t[i].step[k];     /* (field by field: step_t shares n and time in one byte since 1.1.3) */
+                    step_t *dq = &q->t[i].step[k];
+                    memcpy(dq->note, o->note, 4); dq->n = o->n > 4u ? 4u : o->n; dq->time = o->time > ST_REST ? ST_REST : o->time;   /* (bounded before they go in a 3 / 2 bit field) */ dq->flags = o->flags; dq->vel = o->vel;
+                    dq->hit = o->hit; dq->acc = o->acc; dq->probability = 0; dq->ext = 0;
                     q->t[i].step[k].flags &= 3u;       /* (x1: no RATCH then) */
                 }
             }
@@ -712,8 +715,8 @@ static int proj_pack_trk(uint8_t *b, uint32_t *posp, const proj_trk_t *tr)
         for (uint32_t j = 0; j < 4u; j++)           /* what proj_unpack checks, so a saved project always loads: */
             b[pos++] = (uint8_t)((s->note[j] > 127u ? 127u : s->note[j]) | (nd >> j & 1u) << 7);   /* notes and
                                                      * velocity 0..127, accents */
-        b[pos++] = (uint8_t)(s->n | s->time << 3 | (s->flags & 3u) << 5);   /* only on hits */
-        b[pos++] = (uint8_t)((s->vel > 127u ? 127u : s->vel) | (r & 1u) << 7); b[pos++] = s->hit;
+        b[pos++] = (uint8_t)(s->n | s->time << 3 | (s->flags & 3u) << 5 | (!s->hit && s->ext ? 128u : 0u));   /* only on hits; bit 7: LONG notes 2, 3 */
+        b[pos++] = (uint8_t)((s->vel > 127u ? 127u : s->vel) | (r & 1u) << 7); b[pos++] = s->hit ? s->hit : s->ext;
         b[pos++] = s->hit ? s->acc & s->hit : s->acc;          /* (1.1.3: a melodic step's acc byte is its LONG note) */
         b[pos++] = (uint8_t)(s->probability | (r >> 1) << 7);
     }
@@ -731,16 +734,20 @@ static int proj_unpack_trk(proj_trk_t *d, const uint8_t *b, uint32_t *posp, uint
     for (i = 0; i < P_COUNT; i++) def[i] = param_desc_of(d->engine, i)->def;
     params_by_count(d->p, values, np, def);
     for (i = 0; i < NSTEP; i++) {
-        step_t *s = &d->step[i]; uint32_t meta, nd = 0;
+        step_t *s = &d->step[i]; uint32_t meta, nd = 0, xm;
         for (uint32_t j = 0; j < 4u; j++) {         /* (FUN10: bit 7 of note j is bit j of the nudge) */
             if (b[pos] > 127u && !v10) return 0;
             nd |= (uint32_t)(b[pos] >> 7) << j;
             s->note[j] = b[pos++] & 127u;
         }
         meta = b[pos++];
+        xm = v10 ? meta & 128u : 0u;                /* (1.1.3: the hit byte is the LONG notes 2 and 3) */
+        meta &= xm ? 127u : 255u;
         s->n = meta & 7u; s->time = (meta >> 3) & 3u; s->flags = (meta >> 5) & 3u;
         s->vel = b[pos] & 127u; meta |= (b[pos++] & 128u) << 1;      /* (RATCH bit 0 at bit 8 of meta) */
         s->hit = b[pos++]; s->acc = b[pos++];
+        s->ext = 0;
+        if (xm) { s->ext = s->hit; s->hit = 0; }
         s->probability = b[pos] & 127u; meta |= (b[pos++] & 128u) << 2;   /* (bit 1 at bit 9) */
         if ((meta & 255u) > 127u || s->n > 4u || s->time > ST_REST || s->probability >= COND_FIRST + NCOND) return 0;
         if (s->hit && (s->acc & ~s->hit)) return 0;
@@ -1016,7 +1023,7 @@ static void proj_steps(step_t *s)            /* a loaded sequence stays inside i
         if (s[i].n > 4u) s[i].n = 4;
         if (s[i].time > ST_REST) s[i].time = ST_REST;
         for (j = 0; j < 4u; j++) s[i].note[j] &= 127u;
-        if (s[i].hit) s[i].acc &= s[i].hit;
+        if (s[i].hit) { s[i].acc &= s[i].hit; s[i].ext = 0; }
     }
 }
 

@@ -95,7 +95,7 @@ static int compact_project(void)
         for (uint32_t j = 0; j < 61u; j++) old.t[k].p[j] = before.t[k].p[j];
         for (uint32_t j = 0; j < 8u; j++) old.t[k].p[61u + j] = before.t[k].p[P_E0 + j];
         old.t[k].engine = before.t[k].engine; old.t[k].preset = before.t[k].preset;
-        for (uint32_t j = 0; j < NSTEP; j++) memcpy(&old.t[k].step[j], &before.t[k].step[j], sizeof(step10_t));
+        for (uint32_t j = 0; j < NSTEP; j++) STEP10_FROM(&old.t[k].step[j], &before.t[k].step[j]);
     }
     old.chain.count = before.chain.count;              /* (the rows of FUN6: one slot each) */
     for (uint32_t r = 0; r < CHAIN_ROWS; r++) {

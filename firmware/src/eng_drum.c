@@ -166,7 +166,7 @@ static void step_to_grid(step_t *s)
     if (s->time != ST_NOTE)
         return;
     if (!s->hit)
-        s->acc = 0;                                 /* (1.1.3: a LONG note is not a drum accent) */
+        s->acc = s->ext = 0;                        /* (1.1.3: a LONG note is not a drum accent) */
     for (i = 0; i < s->n && i < 4u; i++) {
         uint32_t l = drum_lane(s->note[i]);
         if (s->note[i] == DRUM_LANE_NOTE[l])

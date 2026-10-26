@@ -40,6 +40,8 @@ static void fm1_delay_ms(uint32_t ms) { (void)ms; }
 #include "../firmware/src/midi_uart.c"                /* TRS MIDI IN: its parser (um_byte) feeds midi_in_q */
 #include "../firmware/src/song_chain.c"
 #include "../firmware/src/seq.c"
+#define STEP10_FROM(OLD, NEW) do { memcpy((OLD)->note, (NEW)->note, 4); (OLD)->n = (NEW)->n; (OLD)->time = (NEW)->time; (OLD)->flags = (NEW)->flags; \
+    (OLD)->vel = (NEW)->vel; (OLD)->hit = (NEW)->hit; (OLD)->acc = (NEW)->acc; } while (0)   /* (a step as FUN6 stored it) */
 #define inst (trk[0])                   /* the single-part renders below: part 1 */
 
 static void wav_hdr(FILE *f, uint32_t frames)

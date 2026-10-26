@@ -574,7 +574,7 @@ static int test_sound_loads(void)
         memcpy(legacy.t[ti].p, decoded.t[ti].p, 61u * sizeof(int16_t));
         memcpy(legacy.t[ti].p + 61, decoded.t[ti].p + P_E0, 8u * sizeof(int16_t));
         legacy.t[ti].engine = decoded.t[ti].engine; legacy.t[ti].preset = decoded.t[ti].preset;
-        for (uint32_t st = 0; st < NSTEP; st++) memcpy(&legacy.t[ti].step[st], &decoded.t[ti].step[st], sizeof(step10_t));
+        for (uint32_t st = 0; st < NSTEP; st++) STEP10_FROM(&legacy.t[ti].step[st], &decoded.t[ti].step[st]);
     }
     legacy.t[3].engine = 0;
     legacy.g[G_DRLVL] = 71; legacy.g[G_DRREV] = 43;
