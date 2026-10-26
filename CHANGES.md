@@ -21,6 +21,8 @@ Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything n
   copies (the first 1.1.4 build with 320 each left the pool 332 B short of the 8192 check). `build.py` checks the headroom (RAM 4096, pool 8192): not measured on the host.
 - **KNOB 2 inside a long chord.** On an empty step (REST or TIE) that a chord passes through, turning NOTE no longer makes a lone one-step note: the chord is **cut there**
   (the first part ends before this step) and goes on from it as a chord of its own, with the notes' remaining lengths, and KNOB 2 moves that whole chord, as it does at its first step.
+- **Recording into a long chord.** A note played (REC) into a step that a chord passes through (second pass over a chord recorded from its first step) no longer replaces the chord from there:
+  the chord is cut at that step and goes on from it with its notes' remaining lengths, the new note added (a fifth note replaces the last one). The note's own hold still sets its length.
 - **Fix (since 1.1.3):** the notes 3 and 4 of a chord did not redraw the screen while their LEN was turned (only when the key was let go): the step hash that decides a redraw did not include `ext`.
 - Tests: `tests/notelen_test.c` (`len64`: a chord of 4 to step 63 on the 5 tracks, saved, loaded, and the 1280-byte block).
 

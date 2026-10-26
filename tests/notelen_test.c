@@ -467,6 +467,34 @@ static int split_k2(void)
     bad += check("split: nothing passes: a new note as ever", ok);
     return bad;
 }
+/* 1.1.4: a note recorded into a step a chord passes through is added to the chord, which is cut there and goes on */
+static int rec_add(void)
+{
+    int bad = 0, ok;
+    track_t *t = chord3();
+    uint32_t i;
+    clear16(t);
+    t->step[0] = (step_t){{60, 64, 67}, 3, ST_NOTE, 0, 0};
+    for (i = 0; i < 3u; i++) step_ext_set(&t->step[0], i, 12);
+    song.rec = 1; song.playing = 1;
+    rec_at(t, 8, 0); rec_note(t, 72, 100);
+    ok = t->step[8].n == 4 && t->step[8].note[0] == 60 && t->step[8].note[3] == 72 && note_len_eff(t, 0, 1) == 8 &&
+         note_len_eff(t, 8, 0) == 4 && note_len_eff(t, 8, 2) == 4;
+    bad += check("rec add: a note into a long chord's step: the chord cut there, the notes go on with the new one", ok);
+    rec_release(t, 72);
+    /* the same on TIEs, the new note held three steps */
+    clear16(t);
+    t->step[0] = (step_t){{60, 64}, 2, ST_NOTE, 0, 0};
+    for (i = 1; i < 8u; i++) t->step[i] = (step_t){{0}, 0, ST_TIE, 0, 0};
+    rec_at(t, 5, 0); rec_note(t, 72, 100);
+    rec_at(t, 6, 0); rec_hold(t, 6, 16);
+    rec_at(t, 7, 0); rec_hold(t, 7, 16);
+    rec_release(t, 72);
+    ok = t->step[5].n == 3 && note_len_eff(t, 0, 0) == 5 && note_len_eff(t, 5, 0) == 3 && note_len_eff(t, 5, 2) == 2;   /* (the new note held 2 steps) */
+    bad += check("rec add: on TIEs: cut at step 6, the chord from it with the new note", ok);
+    song.rec = 0; song.playing = 0;
+    return bad;
+}
 static int len_edit(void)
 {
     int bad = 0, ok;
@@ -539,6 +567,7 @@ int main(void)
     bad += long_project();
     bad += long_64();
     bad += split_k2();
+    bad += rec_add();
     bad += masks_fix();
     bad += roll_bars();
     puts(bad ? "notelen tests FAILED" : "notelen tests passed");
