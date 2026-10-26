@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
 /* Effects: per-track DIST and INSERT (1.5), then sends into three
  * shared buses (chorus, tempo delay, reverb). Mono buses, stereo dry mix. */
-#define DLY_LEN 65536u           /* 1.49 s: 1/4 fits from 41 BPM, 1/4D from 61, 1/2 from 81 */
+#define DLY_LEN 32768u           /* 0.74 s (1.1.4; 1.49 s before): 1/4 fits from 81 BPM, 1/4D from 122, 1/2 from 163 (1/8 from 41) */
 #define CHO_LEN 2048u
 static int16_t dly_buf[DLY_LEN] __attribute__((section(".pool")));
 static int16_t cho_buf[CHO_LEN] __attribute__((section(".pool")));
@@ -231,7 +231,7 @@ static uint32_t div_samples(uint32_t div)
 #include "click.c"                                   /* the metronome's click (after the master: audio.c) */
 
 /* the delay's TIME (params.c N_DTIME): N_DIV's ten (div_samples), then 1.5.1's dotted 1/8D 1/16D 1/4D (10, 11, 12: 3/4,
- * 3/8, 3/2 of a quarter); at most DLY_LEN - 1 samples (1.486 s): 1/4D clamps at 60 BPM and below (1/2 below 81) */
+ * 3/8, 3/2 of a quarter); at most DLY_LEN - 1 samples (0.743 s since 1.1.4; 1.486 s before): 1/4 clamps below 81 BPM, 1/4D below 122, 1/2 below 163 */
 static const uint8_t DIV_DOT[3] = {2, 3, 1};           /* 3 quarters >> this */
 static uint32_t delay_samples(void)
 {

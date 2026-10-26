@@ -1170,21 +1170,22 @@ static int test_throw(void)
     song.g[G_DTIME] = 11;
     ok &= delay_samples() == 8268u;                    /* 1/16D: 187.5 ms */
     song.g[G_DTIME] = 12;
-    ok &= delay_samples() == 33075u;                   /* 1/4D: 750 ms */
+    ok &= delay_samples() == DLY_LEN - 1u;             /* 1/4D: 750 ms: past the line (0.743 s since 1.1.4) */
     bad += check("TIME: the ten as before, 1/8D 1/16D 1/4D 3/4 3/8 3/2 of a quarter at 60 61 90 120 BPM", ok);
     song.g[G_BPM] = 61;
-    ok = delay_samples() == 65065u;                   /* 1/4D at 61: 1.475 s, fits */
-    song.g[G_BPM] = 60;
-    ok &= delay_samples() == DLY_LEN - 1u;             /* at 60 (66150): the line's length, 1.486 s */
+    song.g[G_BPM] = 122;
+    ok = delay_samples() == 32532u;                   /* 1/4D at 122: 0.738 s, fits */
+    song.g[G_BPM] = 121;
+    ok &= delay_samples() == DLY_LEN - 1u;             /* at 121 (32800): the line's length, 0.743 s */
     song.g[G_BPM] = 40;
     ok &= delay_samples() == DLY_LEN - 1u;
     song.g[G_CLOCK] = 1;
-    midi_beat_samples = 30000u;                         /* an external clock's quarter */
-    ok &= delay_samples() == 45000u;
+    midi_beat_samples = 20000u;                         /* an external clock's quarter */
+    ok &= delay_samples() == 30000u;
     midi_beat_samples = 0;
     song.g[G_CLOCK] = 0;
     song.g[G_BPM] = 120;
-    bad += check("TIME 1/4D: fits from 61 BPM, clamps to 65535 samples at 60 and below; the external clock's quarter", ok);
+    bad += check("TIME 1/4D: fits from 122 BPM, clamps to 32767 samples at 121 and below; the external clock's quarter", ok);
     {   /* the list: append-only, its own; the knob longest first; ARP RATE / SEQ DIV keep ten */
         const param_desc_t *d = &GP[G_DTIME];
         static const uint8_t SHOWN[13] = {9, 8, 7, 6, 12, 0, 10, 1, 11, 4, 2, 5, 3};

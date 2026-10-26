@@ -17,6 +17,9 @@ Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything n
   track's block PROJ5 is **1480 bytes** (+200: after the old content, under the same hash: a bitmap of the 320 steps that have high bits, then one byte for each of the first 160 of them: a project with more steps than that of lengths over 16 loses the rest), inside the same FUN11 object. A project saved
   by 1.1.0 .. 1.1.3 **opens** (block of 1280 bytes: the high bits are 0; a note with an END code 15 of 1.1.3 is 16 steps); a project saved now does **not open in 1.1.3 or before** (the object is longer).
   The editor's backup takes both sizes.
+- **Memory moved (room for per-note fields later).** The delay line is **half as long**: 0.74 s (32,768 samples; 1.49 s before): a 1/4 delay is in time from 81 BPM, a 1/8 from 41 BPM,
+  1/4D from 122, 1/2 from 163 (below that the delay plays as long as the line allows). The song `chain` (17.7 KB) moved from the RAM `.bss` to the pool; together they free about 65 KB of the pool
+  and 17.7 KB of the RAM. No sound or behaviour change otherwise.
 - **RAM.** About 2 KB more (a byte a step in about 2,000 steps kept: the 5 tracks, the project in RAM, the chain's sources, the undo) plus 5 x 200 bytes in the pool for the block
   copies (the first 1.1.4 build with 320 each left the pool 332 B short of the 8192 check). `build.py` checks the headroom (RAM 4096, pool 8192): not measured on the host.
 - **KNOB 2 inside a long chord.** On an empty step (REST or TIE) that a chord passes through, turning NOTE no longer makes a lone one-step note: the chord is **cut there**

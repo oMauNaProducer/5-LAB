@@ -31,7 +31,7 @@ static struct {
     uint8_t clk;                             /* the track whose loop counts the section (chain_clock) */
     uint8_t rec;
     uint32_t carry;
-} chain;
+} chain __attribute__((section(".pool")));   /* (1.1.4: the pool, not .bss: 17.7 KB of the RAM the audio side shares; zeroed at boot like .bss) */
 /* a silent lane: its steps (empty: nothing plays) and its timing (a 4/4 bar of 1/16: the section's length when every
  * track is silent) */
 static const step_t chain_silent[NSTEP] = {{{0}}};
