@@ -138,7 +138,7 @@ static int len_edit(void)
     t->step[4] = (step_t){{0}, 0, ST_REST, 0, 0, 1, 0, 0};    /* a REST keeping a hit: not overwritten */
     put(t, 3, 50, ST_NOTE);
     turn(EN_K3, 1);
-    ok &= note_len(t, 3) == 1u && msg_is("NOTE AHEAD") && t->step[4].hit == 1u;
+    ok &= note_len(t, 3) == 1u && step_ext_code(&t->step[3]) == 2u && t->step[4].hit == 1u;   /* (1.1.3: a lone note goes on over the step ahead as a LONG note) */
     bad += check("  a REST / TIE / empty step: KNOB 3 TIME (NOTE TIE REST); a REST keeping notes or hits is kept", ok);
 
     ui_power_on();                                    /* the DRUM grid: KNOB 3 is still HIT */

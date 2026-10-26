@@ -553,7 +553,7 @@ static void rec_note(track_t *t, uint32_t note, uint32_t vel)
         if (t->rskip_n < 4u)
             t->rskip[t->rskip_n++] = (uint8_t)note;
     }
-    if (!t->rh_n || t->rh_start != idx) {           /* a new hold (one in another step ends; 1.2.0: a note of it still held goes on) */
+    if (!t->rh_n || t->rh_start != idx) {           /* a new hold (one in another step ends; 1.1.3: a note of it still held goes on) */
         if (t->rh_n)
             rec_long_start(t, len);
         t->rh_n = 0;
@@ -567,7 +567,7 @@ static void rec_note(track_t *t, uint32_t note, uint32_t vel)
         t->rh_note[t->rh_n++] = (uint8_t)note;      /* a chord: held until its last key is up */
 }
 
-/* 1.2.0: hold i of rl_*: the LONG note of its step as long as it is now (a pattern end: up to the end) */
+/* 1.1.3: hold i of rl_*: the LONG note of its step as long as it is now (a pattern end: up to the end) */
 static void rec_long_set(track_t *t, uint32_t i, uint32_t len)
 {
     step_t *s = &t->step[t->rl_idx[i] % NSTEP];
@@ -609,7 +609,7 @@ static void rec_hold(track_t *t, uint32_t idx, uint32_t len)
 {
     step_t *s;
     uint32_t k, i;
-    for (i = 0; i < t->rl_n;) {                     /* 1.2.0: the LONG notes held grow a step */
+    for (i = 0; i < t->rl_n;) {                     /* 1.1.3: the LONG notes held grow a step */
         if (!((song.rec >> trk_index(t)) & 1u) || t->rl_idx[i] == idx) {
             rec_long_drop(t, i);                    /* disarmed, or all the way round the pattern */
             continue;
@@ -638,7 +638,7 @@ static void rec_hold(track_t *t, uint32_t idx, uint32_t len)
     s->n = 0;
     s->time = ST_TIE;
     s->flags = 0;
-    s->vel = tie_vel(t->rh_gone);                   /* (1.2.0: the notes let go before it end here) */
+    s->vel = tie_vel(t->rh_gone);                   /* (1.1.3: the notes let go before it end here) */
     s->hit = s->acc = 0;
 }
 
@@ -647,7 +647,7 @@ static void rec_release(track_t *t, uint32_t note)
 {
     uint32_t i, k = 0, half = step_samples(t, div_samples((uint32_t)t->p[P_SDIV]), t->seq_idx) / 2u;
     for (i = 0; i < t->rl_n; i++)
-        if (t->rl_note[i] == note) {                /* 1.2.0: a LONG note let go: as long as it was held (not the step it is let go early in) */
+        if (t->rl_note[i] == note) {                /* 1.1.3: a LONG note let go: as long as it was held (not the step it is let go early in) */
             if (t->seq_pos < half && t->rl_len[i] > 1u)
                 t->rl_len[i]--;
             rec_long_set(t, i, (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP));
@@ -659,7 +659,7 @@ static void rec_release(track_t *t, uint32_t note)
             t->rh_note[k++] = t->rh_note[i];
     if (k == t->rh_n)
         return;                                     /* not one of them */
-    if (k) {                                        /* 1.2.0: one of a chord let go, the others held: its TIEs from here end it */
+    if (k) {                                        /* 1.1.3: one of a chord let go, the others held: its TIEs from here end it */
         const step_t *h = &t->step[t->rh_start % NSTEP];
         uint32_t j;
         for (j = 0; j < h->n && j < 4u; j++)
@@ -928,7 +928,7 @@ static void tie_masks_fix(track_t *t, uint32_t idx, uint32_t j)
 {
     uint32_t len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP), x;
     if (idx < NSTEP && j >= 4u) {
-        step_ext_set(&t->step[idx], 0, 0);                      /* (1.2.0: a fresh chord has no LONG note) */
+        step_ext_set(&t->step[idx], 0, 0);                      /* (1.1.3: a fresh chord has no LONG note) */
     } else if (idx < NSTEP && step_ext_code(&t->step[idx])) {   /* .. the LONG note follows its note's index, or goes with it */
         uint32_t k = step_ext_note(&t->step[idx]), c = t->step[idx].acc & 63u;
         if (k == j)
@@ -967,7 +967,7 @@ static __attribute__((noinline)) void seq_part_release(track_t *t)
             }
     }
 }
-/* 5-LAB 1.2.0: LONG notes (core.h step_ext_code): a note that lasts its own number of steps whatever the steps after it hold. Up to four
+/* 5-LAB 1.1.3: LONG notes (core.h step_ext_code): a note that lasts its own number of steps whatever the steps after it hold. Up to four
  * sound on a track at once (lng_p: the pitch); lng_left counts the steps still to start before its last one, then lng_off the samples to
  * its note-off (the GATE of that last step). Not in seq_notes: the next step's release leaves them alone */
 static void seq_lng_release_all(track_t *t)
@@ -1116,7 +1116,7 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
     if (!(skip & SEQ_REP)) {
         t->rat_left = 0;
         if (song.playing)
-            seq_lng_step(t, gate);                  /* (1.2.0: LONG notes of the steps before) */
+            seq_lng_step(t, gate);                  /* (1.1.3: LONG notes of the steps before) */
         if (t->seq_rel)
             seq_part_release(t);                    /* (1.1.0: notes of the step before that ended with it, not yet off) */
         if ((skip & SEQ_MISS) || (!(skip & SEQ_ROLLED) && seq_miss(t, s, idx))) {
@@ -1145,7 +1145,7 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
     memset(t->seq_hp, 0, sizeof t->seq_hp);
     if (hits == 1u && song.playing && step_ext_code(s)) {
         uint32_t room = len - idx % len, c = step_ext_code(s);
-        lk = step_ext_note(s);                      /* 1.2.0: the LONG note: its steps to the end of its length or the pattern */
+        lk = step_ext_note(s);                      /* 1.1.3: the LONG note: its steps to the end of its length or the pattern */
         lsteps = c == EXT_END || c > room ? room : c;
     }
     for (i = 0; i < s->n && i < 4u; i++) {
@@ -1161,7 +1161,7 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
                 continue;
         }
         if (i == lk)
-            lm = 1u << m;                           /* (1.2.0: the LONG note's place in nn) */
+            lm = 1u << m;                           /* (1.1.3: the LONG note's place in nn) */
         nn[m] = (uint8_t)x;
         vv[m] = (uint8_t)vel;
         sk |= ((skip >> i) & 1u) << m;
@@ -1179,7 +1179,7 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
         seq_release(t);
     for (i = 0; i < m; i++)
         if (!((sk >> i) & 1u)) {
-            seq_lng_drop(t, nn[i]);                 /* (1.2.0: a long note of this pitch ends where it plays again) */
+            seq_lng_drop(t, nn[i]);                 /* (1.1.3: a long note of this pitch ends where it plays again) */
             trk_note_on(t, nn[i], vv[i]);
         }
     if (slide_in)                                   /* release what is not held over */

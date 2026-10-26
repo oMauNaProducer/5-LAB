@@ -224,7 +224,7 @@ static int32_t pr_nudge_x(const track_t *t, const step_t *st, int32_t x, int32_t
     x += d;
     return x < lo ? lo : x > hi ? hi : x;
 }
-/* 5-LAB 1.2.0: the LONG notes (core.h step_ext_code) of the pattern that reach this page: one bar from the note's step to its last, over
+/* 5-LAB 1.1.3: the LONG notes (core.h step_ext_code) of the pattern that reach this page: one bar from the note's step to its last, over
  * the notes of the steps between */
 static void pr_longs(const track_t *t, uint32_t base, uint32_t ncol, uint16_t c)
 {
@@ -305,7 +305,7 @@ static void graph_roll(const track_t *t, uint16_t c)
         if (s == NSTEP)
             continue;                                 /* a REST, empty, or a TIE after one */
         st = &seq_steps(t)[s];
-        lskip = step_ext_code(st) ? 1u << step_ext_note(st) : 0u;   /* (1.2.0: its LONG note is drawn below) */
+        lskip = step_ext_code(st) ? 1u << step_ext_note(st) : 0u;   /* (1.1.3: its LONG note is drawn below) */
         col = s == ui.cursor || si == ui.cursor ? T_ACCENT : c;
         {   /* 1.0.7: where the next column's own bar starts (nudged), for the space before it and the slide into it */
             int32_t bx = x + 2, nbx = 0, nxx = x + PR_CW + 2, bw = 9;

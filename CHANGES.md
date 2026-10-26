@@ -1,13 +1,18 @@
 # 5-LAB: changes from Felucca 1.6.1
 
 5-LAB is a fork of [Felucca](https://github.com/hugelton/Felucca) 1.6.1 by Leo Kuroshita (Hügelton Instruments), GPL-3.0-only like the
-original. **Version 1.2.0** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
+original. **Version 1.1.3** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
 Five audio tracks, every engine on all five; the lab is for trying things out.
 
 Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything not listed here is Felucca 1.6.1 as it was
 (the sound is the same: the 98 golden renders of `tests/golden.txt` are unchanged).
 
-## 1.2.0: a note can last past the notes after it; live recording keeps each key's length
+## 1.1.3: a note can last past the notes after it; live recording keeps each key's length
+
+- **Stretching takes over the same note.** When a note is stretched over steps that hold the **same pitch**, those are taken over: the pitch goes out of them (a step left
+  empty becomes a REST with its TIEs) instead of sounding again under the long one.
+- **A lone note needs no key.** With one note in the step, KNOB 3 (LEN) edits that note, long notes included; with a chord, hold the note's key (no key: the whole chord).
+
 
 - **LONG note.** A step's note can now last any number of steps **over the notes of the steps after it**: F on step 1 held to the end of the pattern while G
   plays on step 8. On SEQ > STEP, **hold the note's key and turn KNOB 3 (LEN)**: the note's TIEs grow first, up to the next note, and one more turn makes it a LONG

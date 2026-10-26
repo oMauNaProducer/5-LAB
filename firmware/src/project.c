@@ -714,7 +714,7 @@ static int proj_pack_trk(uint8_t *b, uint32_t *posp, const proj_trk_t *tr)
                                                      * velocity 0..127, accents */
         b[pos++] = (uint8_t)(s->n | s->time << 3 | (s->flags & 3u) << 5);   /* only on hits */
         b[pos++] = (uint8_t)((s->vel > 127u ? 127u : s->vel) | (r & 1u) << 7); b[pos++] = s->hit;
-        b[pos++] = s->hit ? s->acc & s->hit : s->acc;          /* (1.2.0: a melodic step's acc byte is its LONG note) */
+        b[pos++] = s->hit ? s->acc & s->hit : s->acc;          /* (1.1.3: a melodic step's acc byte is its LONG note) */
         b[pos++] = (uint8_t)(s->probability | (r >> 1) << 7);
     }
     *posp = pos;

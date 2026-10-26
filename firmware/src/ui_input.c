@@ -921,7 +921,7 @@ static void step_edit(uint32_t slot, int32_t steps)
         break;
     case 2:                                               /* TIME; a note's LEN (1.5: ui.c note_set_len) */
         if (step_on(st)) {
-            int hk = st->n ? held_note_idx(st) : -1;      /* 1.1.0: a key of the chord held: that note's LEN alone (1.2.0: it can go on over the next notes) */
+            int hk = note_target(st);                      /* 1.1.0: a key of the chord held: that note's LEN alone (1.1.3: it can go on over the next notes) */
             const char *em = 0;
             uint32_t was = hk >= 0 ? note_len_eff(TSEL, ui.cursor, (uint32_t)hk) : note_len(TSEL, ui.cursor), n;
             step_undo_take(TSEL, 0x2000u);                /* (a knob turned on: one undo, SAVE held) */

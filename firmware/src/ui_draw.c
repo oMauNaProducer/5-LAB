@@ -1298,7 +1298,7 @@ static void draw_columns(void)
             draw_column(0, "STEP", sn, sl, VAL(0u), -1, ICON_AUTO);
             draw_column(1, "NOTE", val, u, step_on(st) ? VAL(1u) : T_DIM, -1, ICON_AUTO);
             if (step_on(st)) {                            /* a note: its LEN (1.5, KNOB 3: the TIEs after it) */
-                int hk = st->n ? held_note_idx(st) : -1;   /* 1.1.0: a chord's note held: its own LEN (1.2.0: a single note too) */
+                int hk = note_target(st);                      /* 1.1.0: a chord's note held: its own LEN (1.1.3: a single note too) */
                 fmt_int(sn, (int32_t)(hk >= 0 ? note_len_eff(TSEL, ui.cursor, (uint32_t)hk) : note_len(TSEL, ui.cursor)));
                 draw_column(2, "LEN", sn, hk >= 0 ? "NOTE" : "", VAL(2u), -1, ICON_AUTO);
             } else {

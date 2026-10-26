@@ -83,7 +83,7 @@ static int lng_has(const track_t *t, uint32_t p)
             return 1;
     return 0;
 }
-/* 1.2.0: a LONG note passes the notes of the steps after it */
+/* 1.1.3: a LONG note passes the notes of the steps after it */
 static int long_notes(void)
 {
     int bad = 0;
@@ -138,7 +138,7 @@ static int long_notes(void)
     return bad;
 }
 
-/* 1.2.0: live recording: each key lasts as long as it was held, a chord grows key by key and lets go together (or apart) */
+/* 1.1.3: live recording: each key lasts as long as it was held, a chord grows key by key and lets go together (or apart) */
 static void rec_at(track_t *t, uint32_t step, uint32_t half)
 {
     uint32_t sl = step_samples(t, div_samples((uint32_t)t->p[P_SDIV]), step);
@@ -281,6 +281,35 @@ static int long_project(void)
     bad += check("  a drum hit's accent too", t->step[5].hit == 1 && t->step[5].acc == 1);
     return bad;
 }
+
+static int long_absorb(void)
+{
+    int bad = 0, ok;
+    track_t *t = chord3();
+    const char *m;
+    uint32_t i;
+    for (i = 0; i < 16u; i++) { memset(&t->step[i], 0, sizeof t->step[i]); t->step[i].time = ST_REST; }
+    t->step[0] = (step_t){{60}, 1, ST_NOTE, 0, 0};
+    t->step[4] = (step_t){{60}, 1, ST_NOTE, 0, 0};          /* the same note again */
+    t->step[6] = (step_t){{60, 64}, 2, ST_NOTE, 0, 0};      /* .. in a chord */
+    t->step[7] = (step_t){{0}, 0, ST_TIE, 0, 0};
+    t->step[9] = (step_t){{60}, 1, ST_NOTE, 0, 0};
+    for (i = 0; i < 4u; i++) note_edit_k(t, 0, 0, 1, &m);   /* 5 steps: reaches step 5 (index 4) */
+    ok = t->step[4].time == ST_REST && !t->step[4].n && t->step[6].n == 2;
+    bad += check("absorb: stretched to the same note on step 5: that step is a REST, not a second C under it", ok);
+    for (i = 0; i < 2u; i++) note_edit_k(t, 0, 0, 1, &m);   /* 7 steps: reaches the chord on step 7 */
+    ok = t->step[6].n == 1 && t->step[6].note[0] == 64 && t->step[6].time == ST_NOTE && step_ext_code(&t->step[0]) == 7;
+    bad += check("  .. in a chord: only the C goes, the E stays", ok);
+    for (i = 0; i < 4u; i++) note_edit_k(t, 0, 0, 1, &m);
+    ok = t->step[9].time == ST_REST;
+    bad += check("  .. and further steps", ok);
+    t->step[2] = (step_t){{60}, 1, ST_NOTE, 0, 0};
+    t->step[3] = (step_t){{0}, 0, ST_TIE, 0, 0};
+    note_absorb(t, 0, 0, 5);
+    ok = t->step[2].time == ST_REST && t->step[3].time == ST_REST;
+    bad += check("  a step left empty takes its TIEs with it", ok);
+    return bad;
+}
 static int len_edit(void)
 {
     int bad = 0, ok;
@@ -348,6 +377,7 @@ int main(void)
     bad += long_notes();
     bad += rec_long();
     bad += long_edit();
+    bad += long_absorb();
     bad += long_roll();
     bad += long_project();
     bad += masks_fix();

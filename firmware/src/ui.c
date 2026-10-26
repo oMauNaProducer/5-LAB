@@ -625,7 +625,7 @@ static uint32_t note_set_len_k(track_t *t, uint32_t i, uint32_t k, uint32_t want
     return note_len_k(t, i, k);
 }
 
-/* 1.2.0: note k of the chord at step i, its length as it sounds: its LONG length (core.h step_ext_code) if it has one, else its TIEs' */
+/* 1.1.3: note k of the chord at step i, its length as it sounds: its LONG length (core.h step_ext_code) if it has one, else its TIEs' */
 static uint32_t note_len_eff(const track_t *t, uint32_t i, uint32_t k)
 {
     const step_t *s = &t->step[i];
@@ -633,6 +633,40 @@ static uint32_t note_len_eff(const track_t *t, uint32_t i, uint32_t k)
     if (c && step_ext_note(s) == k)
         return c == EXT_END || c > room ? room : c;
     return note_len_k(t, i, k);
+}
+/* 1.1.3: note k of step i now lasts n steps: the same pitch in the NOTE steps it reaches is taken over (taken out of them; a step left with
+ * nothing becomes a REST, with the TIEs after it) instead of sounding again under it */
+static int held_note_idx(const step_t *st);
+static void note_absorb(track_t *t, uint32_t i, uint32_t k, uint32_t n)
+{
+    uint32_t len = (uint32_t)clamp(t->p[P_SLEN], 1, NSTEP), j, m, q;
+    uint8_t p = t->step[i].note[k];
+    for (j = i + 1u; j < i + n && j < len; j++) {
+        step_t *s = &t->step[j];
+        if (s->time != ST_NOTE || s->hit)
+            continue;
+        for (m = 0; m < s->n && m < 4u && s->note[m] != p; m++)
+            ;
+        if (m >= s->n || m >= 4u)
+            continue;
+        tie_masks_fix(t, j, m);
+        for (q = m; q + 1u < 4u; q++)
+            s->note[q] = s->note[q + 1u];
+        s->note[3] = 0;
+        s->n--;
+        if (!s->n) {
+            step_clear(s);
+            s->time = ST_REST;
+            for (q = j + 1u; q < len && t->step[q].time == ST_TIE; q++)
+                step_clear(&t->step[q]), t->step[q].time = ST_REST;
+        }
+    }
+}
+/* the note KNOB 3 edits: the one whose key is held, else the only note of the step; -1 the whole chord */
+static int note_target(const step_t *st)
+{
+    int h = st->n ? held_note_idx(st) : -1;
+    return h >= 0 ? h : st->n == 1u ? 0 : -1;
 }
 /* KNOB 3 on a held note of the chord (steps: the turn): its TIEs while they can grow (up to the next note), then a LONG note that goes on
  * over the notes after it (one a step); down to 1 and below it the LONG note is off. msg: what stopped it. Returns the length it got */
@@ -655,6 +689,7 @@ static uint32_t note_edit_k(track_t *t, uint32_t i, uint32_t k, int32_t steps, c
             want = (int32_t)room;
         }
         step_ext_set(s, k, (uint32_t)want >= room ? EXT_END : (uint32_t)want);
+        note_absorb(t, i, k, (uint32_t)want);
         return (uint32_t)want;
     }
     {
@@ -667,6 +702,7 @@ static uint32_t note_edit_k(track_t *t, uint32_t i, uint32_t k, int32_t steps, c
             } else {                                  /* a note ahead stops the TIEs: the note goes on over it */
                 uint32_t w = (uint32_t)want;
                 step_ext_set(s, k, w >= room ? EXT_END : w);
+                note_absorb(t, i, k, w >= room ? room : w);
                 return w >= room ? room : w;
             }
         }
