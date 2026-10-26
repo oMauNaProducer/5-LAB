@@ -165,7 +165,35 @@ typedef struct {                 /* acid-style step: up to 4 notes (POLY), time,
     uint8_t probability;         /* 0 = legacy 100%; 1..100 = percent, 101 = silent; 1.5.5: 102..112 a condition */
     uint8_t ext;                 /* 1.1.3: with hit == 0: the LONG notes 2 and 3 */
     uint8_t ext2;                /* 1.1.4: with hit == 0: the high two bits of each LONG note's code (note k: bits 2k, 2k+1) */
+    uint8_t nv[4];               /* 1.1.5: note k's own VEL, 1..127 (0: the step's vel); only read for k < n */
+    uint8_t nd[2];               /* 1.1.5: note k's own NUDGE offset, a signed nibble -8..+7 (note k: nd[k >> 1] >> (4 * (k & 1))), added to the step's; 0: none */
 } step_t;
+/* 1.1.5: per-note VEL and NUDGE. They belong to the note's place in note[]: whatever removes or moves a note moves them
+ * (step_note_del), whatever starts a step over clears them (step_pn_clear), and a note added starts with none (step_pn_new) */
+static inline void step_pn_new(step_t *s, uint32_t k) { s->nv[k & 3u] = 0; s->nd[(k & 3u) >> 1] &= (uint8_t)~(15u << (4u * (k & 1u))); }
+static inline void step_pn_clear(step_t *s) { s->nv[0] = s->nv[1] = s->nv[2] = s->nv[3] = 0; s->nd[0] = s->nd[1] = 0; }
+static inline int32_t step_note_nd(const step_t *s, uint32_t k)
+{
+    uint32_t u = ((uint32_t)s->nd[(k & 3u) >> 1] >> (4u * (k & 1u))) & 15u;
+    return (int32_t)(u ^ 8u) - 8;
+}
+static inline void step_set_note_nd(step_t *s, uint32_t k, int32_t v)
+{
+    uint32_t u = (uint32_t)(v < -8 ? -8 : v > 7 ? 7 : v) & 15u, sh = 4u * (k & 1u);
+    s->nd[(k & 3u) >> 1] = (uint8_t)((s->nd[(k & 3u) >> 1] & ~(15u << sh)) | u << sh);
+}
+/* note k of s leaves: the notes after it move up, with their VEL / NUDGE, and the last place is clear */
+static inline void step_note_del(step_t *s, uint32_t k)
+{
+    uint32_t q;
+    for (q = k; q < 3u; q++) {
+        s->note[q] = s->note[q + 1u];
+        s->nv[q] = s->nv[q + 1u];
+        step_set_note_nd(s, q, step_note_nd(s, q + 1u));
+    }
+    s->note[3] = 0;
+    step_pn_new(s, 3u);
+}
 /* 5-LAB 1.1.0: a chord's notes with lengths of their own. A TIE step's vel (unused on a TIE) = 0x10 | mask: bit k of the mask = note k of the
  * NOTE step the TIEs follow ended before this TIE (seq.c, ui.c note_set_len_k). Any other vel (0, a project of before, a REST's 96 ...) is: all go on */
 static inline uint32_t tie_mask(const step_t *s) { return s->time == ST_TIE && (s->vel & 0x70u) == 0x10u ? (uint32_t)s->vel & 15u : 0u; }
@@ -275,6 +303,16 @@ static void step_set_nudge(step_t *s, int32_t v)
     uint32_t u = (uint32_t)(v < -8 ? -8 : v > 7 ? 7 : v) & 15u;
     s->flags = (uint8_t)((s->flags & ~SF_NUDGE) | (u & 7u) << 5 | (u >> 1 & 4u));
 }
+/* 1.1.5: note k's NUDGE as it plays: the step's plus its own, kept in -8..+7; step_pn_any: the step holds a note's own VEL / NUDGE */
+static inline int32_t step_nd_eff(const step_t *s, uint32_t k)
+{
+    int32_t v = step_nudge(s) + step_note_nd(s, k);
+    return v < -8 ? -8 : v > 7 ? 7 : v;
+}
+static inline int step_pn_any(const step_t *s)
+{
+    return (s->nv[0] | s->nv[1] | s->nv[2] | s->nv[3] | s->nd[0] | s->nd[1]) != 0;
+}
 #define MOTION_MAX 128u          /* 1.2 (FUN10): 64 before */
 /* Four tracks x64 steps fit one byte. Values retain their signed parameter range (-64..127: an int8_t, 1.2).
  * param: the P_* id (< 128: P_COUNT is at most 127, project.c), bit 7 (MOTION_LOCK, 1.1) a parameter lock: the value
@@ -345,6 +383,8 @@ typedef struct track {
     uint8_t seq_hp[4];           /* 1.1.0: the pitch each note of the playing step sounds (0 none), seq_rel the notes ending at the end of this step (a bit */
     uint8_t lng_p[NLNG], lng_left[NLNG];   /* 1.1.3: LONG notes sounding (seq.c seq_lng_*): pitch (0 free), steps still to start before its last one */
     uint32_t lng_off[NLNG];          /* .. samples to its note-off once in its last step */
+    uint8_t dq_n, dq_note[4], dq_vel[4], dq_lc[4];   /* 1.1.5: notes of the playing step that start later (a note's own NUDGE; seq.c seq_dq_*): pitch, VEL, its LONG steps (1: one) */
+    uint32_t dq_wait[4], dq_gate;    /* .. samples to each one's start; the GATE it then lasts */
     uint8_t seq_rel, seq_gone;   /* a note of the step: its TIEs' note mask), seq_gone those released already (seq.c seq_part_release) */
     uint8_t slide_glide;         /* next legato note glides (slide) */
     uint8_t rat_left;            /* RATCH: repeats of the playing step still to come (seq.c seq_ratchet) */
@@ -383,9 +423,9 @@ typedef struct track {
     uint8_t lfo_wrap;            /* the LFO's phase wrapped this block: its S&H is drawn after the parts (voice.c) */
     uint32_t esync_k[3];         /* ATK's step, DEC's and REL's coefficient (Q16) this block (voice.c esync_coef) */
     uint8_t spread_on;           /* SPREAD this block (fx.c mix_part, voice.c track_render) */
-    uint8_t rsv_sz[8];          /* (sizeof(track_t) a multiple of 16: below) */
+    uint8_t rsv_sz[1];          /* (sizeof(track_t) a multiple of 16: below) */
 #else
-    uint8_t rsv_sz[6];          /* (sizeof(track_t) a multiple of 16: below) */
+    uint8_t rsv_sz[1];          /* (sizeof(track_t) a multiple of 16: below) */
 #endif
     int16_t armp, aholdp;        /* P_AMODE / P_AHOLD as last seen by the ISR */
     /* engine switch (voice.c engine_block): the old engine's voices fade out, then it switches */

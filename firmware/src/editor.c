@@ -302,6 +302,7 @@ static void ed_step_put(step_t *st, const uint8_t *a, uint32_t na)
 {
     uint32_t i;
     st->n = (uint8_t)(a[0] > 4u ? 4u : a[0]);
+    step_pn_clear(st);                               /* (1.1.5: an editor does not know the notes' own VEL / NUDGE) */
     for (i = 0; i < 4u; i++)
         st->note[i] = a[1 + i] & 0x7Fu;
     st->time = (uint8_t)(a[5] > ST_REST ? ST_REST : a[5]);

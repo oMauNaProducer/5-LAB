@@ -1,11 +1,27 @@
 # 5-LAB: changes from Felucca 1.6.1
 
 5-LAB is a fork of [Felucca](https://github.com/hugelton/Felucca) 1.6.1 by Leo Kuroshita (Hügelton Instruments), GPL-3.0-only like the
-original. **Version 1.1.4** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
+original. **Version 1.1.5** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
 Five audio tracks, every engine on all five; the lab is for trying things out.
 
 Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything not listed here is Felucca 1.6.1 as it was
 (the sound is the same: the 98 golden renders of `tests/golden.txt` are unchanged).
+
+## 1.1.5: a note's own VEL and NUDGE
+
+- **Each note of a chord has its own VEL and its own NUDGE.** SEQ > DETAIL: on a step of two notes or more, **hold the key of one note**: KNOB 3 (NUDGE) and KNOB 4 (VEL) turn *that note's*
+  (their units read NOTE). With no key held they are the step's, as before. A note's VEL is 1..127; equal to the step's it is none of its own (it follows the step when the step's changes).
+  A note's NUDGE is shown as the time it plays (the step's NUDGE plus its own offset, -8..+7 sixteenths of the step); EDIT on DETAIL resets the steps' own values too.
+- **Playing.** With QUANTIZE OFF a step plays at its earliest note; the later ones start after the difference (and each lasts the GATE from its own start). With QUANTIZE ON the notes
+  start together, as always. A step that slides, or is held into by a TIE, plays its notes together. A ratcheted step has no per-note NUDGE (the parts divide the step).
+  An ACC step still plays 127 for the notes that have no VEL of their own.
+- **Recording.** The first note of a step still sets the step's NUDGE and VEL; the notes played after it in the same step keep **their own** NUDGE (how much later they were played) and VEL
+  (if it differs from the step's). So fast notes in one step stay a roll, not a chord (with QUANTIZE OFF).
+- **Storage (the saved format changes).** `step_t` is 6 bytes bigger (`nv[4]`, `nd[2]`). PROJ5 is **3400 bytes** (+1920: 6 bytes for each of the 320 steps of the 5 tracks, VEL then NUDGE of its
+  four notes, after the 1.1.4 content and under the same hash), inside the same FUN11 object. Projects of 1.1.4 (1480 bytes) and 1.1.0 .. 1.1.3 (1280) **open** with no per-note values; a project
+  saved now does **not open in 1.1.4 or before**. The editor's backup takes all three sizes. An editor that writes a step (STEP_SET) clears that step's per-note values.
+- **Memory.** About 5 KB more RAM and 17 KB more pool (the steps kept, the block copies); the numbers are checked by `build.py` (RAM 4096, pool 8192), not measured on the host.
+- Not yet: a note's own CHANCE and RATCH, and showing a note's own NUDGE on the piano roll.
 
 ## 1.1.4: every note, 2 to 64 steps
 

@@ -21,9 +21,9 @@ Changes of this fork against 1.6.1, all of them visible on the wire:
 - MENU gets **T5 CHANNEL** as the last item (index and id 32 without the 2ND CORE row, 33 with it; the MIDI tab); SCREEN WAKE
   (id 31) moves to the SYSTEM tab (its id and index do not change, only the tab it reports).
 - full backup: ids **10..14** are the fifth track's half of the music (10, with id 0) and of the slots A..D (11..14, with ids
-  2..5); 1280 bytes or 0 (none); a half names the project it belongs to, so restore ids 11..14 after their ids 2..5 and id 10
+  2..5); 1280, 1480 or 3400 bytes (1.1.5), or 0 (none); a half names the project it belongs to, so restore ids 11..14 after their ids 2..5 and id 10
   right after id 0. The sample slots are ids 32 and 33 (id 34 is gone). The list has 17 objects.
-- projects: FUN10 keeps its 4-track layout; the fifth track is a 1280-byte block (FT5A) that 5-LAB 1.0.1 stores in the same flash object as the FUN10 record ("FUN11", two sectors a copy; 1.0.0 kept it in an object of its own). The archive (ids 0..14) is the same. A song
+- projects: FUN10 keeps its 4-track layout; the fifth track is a block of 1280 bytes (1480 since 1.1.4, 3400 since 1.1.5) (FT5A) that 5-LAB 1.0.1 stores in the same flash object as the FUN10 record ("FUN11", two sectors a copy; 1.0.0 kept it in an object of its own). The archive (ids 0..14) is the same. A song
   saved here reads on firmware 1.6.1 as a project of four tracks (the fifth is dropped); older projects load with track 5 at its power-on sound.
 
 Where the text below says "the four tracks" it is describing 1.x: read it as the `NTRK` tracks (the 128 motion records are shared by all five).
@@ -835,8 +835,8 @@ this firmware sends 3. Requests name objects, never flash addresses.
 | 6, 7 | user preset banks (slots 1..16, 17..32) | the bank's size, or 0 if empty |
 | 8 | the FM6 patch bank of 1.0..1.0.2 (B1..B27). Since 1.0.3 always listed empty (see below) | 3472, or 0 if empty |
 | 9 | the user presets' FM6 patches (1.0.3; `up_fm6.c`: per slot a tag and the packed patch) | 3728, or 0 if none |
-| 10 | 5-LAB: the fifth track's half of id 0 (FT5A, linked to it) | 1280, or 0 if none |
-| 11..14 | 5-LAB: the fifth track's half of ids 2..5 | 1280, or 0 if none |
+| 10 | 5-LAB: the fifth track's half of id 0 (FT5A, linked to it) | 1280, 1480 or 3400, or 0 if none |
+| 11..14 | 5-LAB: the fifth track's half of ids 2..5 | 1280, 1480 or 3400, or 0 if none |
 | 32, 33 | user sample slots 1..2: header (512 bytes) then ADPCM data (34, slot 3, up to 1.6.1 and 0.9.8) | 512 + data length, or 0 if empty |
 
 Reading: `BACKUP_LIST` (no arguments) stops the transport, then takes a snapshot of the runtime object and

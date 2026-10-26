@@ -839,12 +839,35 @@ static uint64_t sd_steps(void)
     uint64_t m = sd_held();
     return m ? m : (uint64_t)1 << ui.cursor;
 }
+/* 1.1.5: NUDGE and VEL of one note of a chord: its key held on a step of two notes or more (a POLY track): KNOB 3 / 4 turn that note's own (the step's
+ * stay; the NUDGE shown is the note's, the step's plus its own offset, -8..+7; a VEL equal to the step's is none of its own) */
+static void sd_turn_note(uint32_t hk, uint32_t k, int32_t d)
+{
+    track_t *t = TSEL;
+    step_t *st = &t->step[ui.cursor];
+    step_undo_take(t, 0x4000u | (k == EVK_VEL ? 3u : 2u) << 6 | ui.cursor);
+    if (k == EVK_VEL) {
+        int32_t sv = st->vel ? st->vel : 96, v = clamp((st->nv[hk] ? st->nv[hk] : sv) + d, 1, 127);
+        st->nv[hk] = (uint8_t)(v == sv ? 0 : v);
+        ui_message("NOTE VEL");
+    } else {
+        int32_t v = clamp(step_nd_eff(st, hk) + d, -8, 7);
+        step_set_note_nd(st, hk, v - step_nudge(st));
+        if (t->p[P_SQNT])
+            ui_message("QUANTIZE IS ON");
+    }
+    motion_undo_done(t);
+}
 static void sd_turn(uint32_t slot, int32_t steps)
 {
     track_t *t = TSEL;
     uint32_t k = SD_KIND[slot & 3u], i, n = 0;
     uint64_t m = sd_steps();
     int32_t d = k == EVK_CHANCE ? accel(EN_K1 + slot, steps, 100) : k == EVK_VEL ? accel(EN_K1 + slot, steps, 126) : steps;
+    if ((k == EVK_NUDGE || k == EVK_VEL) && sd_note(&t->step[ui.cursor]) >= 0) {
+        sd_turn_note((uint32_t)sd_note(&t->step[ui.cursor]), k, d);
+        return;
+    }
     for (i = 0; i < NSTEP; i++)
         n += ((m >> i) & 1u) && sd_takes(&t->step[i], k);
     if (!n) {
@@ -876,14 +899,19 @@ static void sd_reset(void)
     for (i = 0; i < NSTEP; i++)
         for (k = 0; k < 4u; k++)
             n += ((m >> i) & 1u) && ev_sval(&t->step[i], SD_KIND[k]) != ev_sdefv(SD_KIND[k]);
+    for (i = 0; i < NSTEP; i++)
+        n += ((m >> i) & 1u) && step_pn_any(&t->step[i]);
     if (!n) {
         ui_message("NOTHING TO RESET");
         return;
     }
     step_undo_take(t, 0);
-    for (i = 0; i < NSTEP; i++)
+    for (i = 0; i < NSTEP; i++) {
         for (k = 0; (m >> i) & 1u && k < 4u; k++)
             ev_sput(&t->step[i], SD_KIND[k], ev_sdefv(SD_KIND[k]));
+        if ((m >> i) & 1u)
+            step_pn_clear(&t->step[i]);             /* (1.1.5: the notes' own VEL / NUDGE too) */
+    }
     motion_undo_done(t);
     ui_message("STEP RESET");
 }
@@ -917,6 +945,7 @@ static void step_edit(uint32_t slot, int32_t steps)
         if (!st->n) {
             st->note[0] = last_note;
             st->n = 1;
+            step_pn_clear(st);
             st->time = ST_NOTE;
             break;
         }
@@ -1193,9 +1222,10 @@ static uint32_t oct_taps(uint32_t pressed, int here)
  * EDIT leaves it */
 static void step_toggle(const track_t *t, step_t *st, const uint8_t *ch, uint32_t n)
 {
-    uint32_t i, j, k;
+    uint32_t i, j;
     if (st->time != ST_NOTE) {
         st->n = 0;
+        step_pn_clear(st);
         st->time = ST_NOTE;
     }
     for (j = 0; j < st->n && st->note[j] != ch[0]; j++)
@@ -1205,8 +1235,7 @@ static void step_toggle(const track_t *t, step_t *st, const uint8_t *ch, uint32_
             for (j = 0; j < st->n; j++)
                 if (st->note[j] == ch[i]) {
                     tie_masks_fix((track_t *)t, (uint32_t)(st - t->step), j);   /* (1.1.0: its TIEs' masks lose that note) */
-                    for (k = j; k + 1u < st->n; k++)
-                        st->note[k] = st->note[k + 1u];
+                    step_note_del(st, j);           /* (1.1.5: with its own VEL / NUDGE) */
                     st->n--;
                     break;
                 }
@@ -1217,14 +1246,17 @@ static void step_toggle(const track_t *t, step_t *st, const uint8_t *ch, uint32_
     if (t->p[P_VOICE] && !ENGINES[t->engine]->oneshot) {   /* MONO / LEG / UNI: one note */
         st->note[0] = ch[0];
         st->n = 1;
+        step_pn_clear(st);
         tie_masks_fix((track_t *)t, (uint32_t)(st - t->step), 4u);
         return;
     }
     for (i = 0; i < n && st->n < 4u; i++) {
         for (j = 0; j < st->n && st->note[j] != ch[i]; j++)
             ;
-        if (j == st->n)
-            st->note[st->n++] = ch[i];
+        if (j == st->n) {
+            st->note[st->n] = ch[i];
+            step_pn_new(st, st->n++);
+        }
     }
 }
 
@@ -1258,6 +1290,7 @@ static void seq_entry(uint32_t pressed)
                 note_longify_at(t, ui.cursor);            /* (1.1.4: the chord whose TIEs pass here goes on under the step entered) */
             if (!add) {
                 st->n = 0;
+                step_pn_clear(st);
                 st->time = ST_NOTE;
             }
         }
@@ -1267,12 +1300,15 @@ static void seq_entry(uint32_t pressed)
         else if (t->p[P_VOICE] && !ENGINES[t->engine]->oneshot) {   /* (drums: hits stack as a chord) */
             st->note[0] = ch[0];
             st->n = 1;
+            step_pn_clear(st);
         } else {
             for (i = 0; i < n && st->n < 4u; i++) {
                 for (j = 0; j < st->n && st->note[j] != ch[i]; j++)
                     ;
-                if (j == st->n)
-                    st->note[st->n++] = ch[i];
+                if (j == st->n) {
+                    st->note[st->n] = ch[i];
+                    step_pn_new(st, st->n++);
+                }
             }
         }
         last_note = (uint8_t)note;

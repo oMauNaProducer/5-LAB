@@ -569,6 +569,11 @@ static int note_target(const step_t *st)
     int h = st->n ? held_note_idx(st) : -1;
     return h >= 0 ? h : st->n == 1u ? 0 : -1;
 }
+/* 1.1.5: the note of a chord (two or more, a POLY track) whose key is held on a step: SEQ > DETAIL's NUDGE and VEL are that note's own (ui_input.c sd_turn_note); -1 none */
+static int sd_note(const step_t *st)
+{
+    return !drum_track(TSEL) && st->time == ST_NOTE && st->n >= 2u ? held_note_idx(st) : -1;
+}
 /* KNOB 3 on a note of the chord (steps: the turn): its TIEs while they can grow (up to the next note), then a LONG note that goes on over the
  * notes after it (2..64 steps, the last of them END, the end of the pattern); below 2 the LONG note is off and the note is
  * back to its TIEs. msg: what stopped it. Returns the length it got */
@@ -670,16 +675,15 @@ static int black_held(uint32_t p)
  * a note of another pitch on the lane (a low tom 41) becomes the lane's own */
 static void grid_own(step_t *s, uint32_t l)
 {
-    uint32_t k, j = 0;
+    uint32_t k = 0;
     step_to_grid(s);
-    for (k = 0; k < s->n; k++)
-        if (drum_lane(s->note[k]) == l)
+    while (k < s->n)
+        if (drum_lane(s->note[k]) == l) {
             s->hit |= (uint8_t)(1u << l);
-        else
-            s->note[j++] = s->note[k];
-    for (k = j; k < 4u; k++)
-        s->note[k] = 0;
-    s->n = (uint8_t)j;
+            step_note_del(s, k);                    /* (1.1.5: with its own VEL / NUDGE) */
+            s->n--;
+        } else
+            k++;
 }
 
 /* lane l of step i: on 1, off 0, toggled 2 */
@@ -1226,6 +1230,7 @@ static void load_pat16(track_t *t, const uint8_t *note, const uint8_t *flags)
         s->flags = n ? (fl & (SF_ACCENT | SF_SLIDE | SF_RATCH)) : 0;
         s->vel = n ? 96 : 0;
         s->hit = s->acc = s->ext = s->ext2 = 0;
+        step_pn_clear(s);
         s->probability = 0;
         if (drum_track(t))                           /* a DRUM track: the lanes' notes as its grid */
             step_to_grid(s);

@@ -397,8 +397,6 @@ static int nudge(void)
     note_step(t, 3, 63, 0);
     {
         uint16_t rw[EV_ROWS];
-        step_t ref[NSTEP];
-        uint32_t n;
         go_auto_top(); frame();
         turn(EN_K1, 2);                                 /* PLAY -> REC -> QUANTIZE */
         ok = auto_cur() == EVC(EVK_QNT, 0) && t->p[P_SQNT] == 1;
@@ -409,33 +407,7 @@ static int nudge(void)
         press(B_OCTUP); press(B_EDIT);
         ok &= t->p[P_SQNT] == 1 && msg_is("NOTHING TO DELETE") && !act_ready() && str_eq(act_name(4), "--");
         bad += check("AUTOMATION's QUANTIZE row (the third): KNOB 4 OFF / ON; OCT+ and EDIT nothing", ok);
-        memcpy(ref, t->step, sizeof ref);
-        go_auto_add(EV_NUDGE, 3); frame();
-        n = ev_list(rw);
-        press(B_OCTUP);
-        ok = step_nudge(&t->step[3]) == 4 && auto_cur() == EVC(EVK_NUDGE, 3) && msg_is("QUANTIZE IS ON") &&
-             ev_list(rw) == n + 1u && !memcmp(&t->step[4], &ref[4], sizeof ref[4] * (NSTEP - 4u));
-        turn(EN_K4, 1); turn(EN_K4, 1); turn(EN_K4, 1); turn(EN_K4, 1);
-        ok &= step_nudge(&t->step[3]) == 7 && msg_is("QUANTIZE IS ON");
-        for (i = 0; i < 20u; i++) turn(EN_K4, -1);
-        ok &= step_nudge(&t->step[3]) == -8;
-        bad += check("AUTOMATION + ADD NUDGE: step 4 +4/16 (QUANTIZE ON: says so), KNOB 4 -8..+7", ok);
-        frame();
-        t->p[P_SQNT] = 0;
-        ui.msg_t = 0;
-        for (i = 0; i < 11u; i++) turn(EN_K4, 1);
-        bad += check("  QUANTIZE OFF: no message", step_nudge(&t->step[3]) == 3 && !msg_is("QUANTIZE IS ON"));
-        frames(2000);                                   /* (the next turn its own undo) */
-        turn(EN_K2, 1);                                 /* to step 5: step 4 back to 0 */
-        ok = step_nudge(&t->step[3]) == 0 && step_nudge(&t->step[4]) == 3 && auto_cur() == EVC(EVK_NUDGE, 4);
-        hold(B_SAVE);
-        ok &= step_nudge(&t->step[3]) == 3 && step_nudge(&t->step[4]) == 0;
-        hold(B_SAVE);
-        ok &= step_nudge(&t->step[4]) == 3;
-        bad += check("  KNOB 2 moves it to the next step; SAVE held undoes the move, held again redoes it", ok);
-        press(B_EDIT);
-        ok = step_nudge(&t->step[4]) == 0 && msg_is("DELETED");
-        bad += check("  EDIT: back to 0 (the row goes)", ok && ev_list(rw) == n);
+        /* (1.1.4: the NUDGE row of AUTOMATION is gone: DETAIL's KNOB 3 sets it, tests/detail_test.c) */
         t->p[P_SQNT] = 1;
     }
     {   /* the DRUM grid on STEP: a step key held + the PRESETS knob; let go: the hit stays */

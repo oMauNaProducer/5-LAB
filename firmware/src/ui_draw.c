@@ -1204,11 +1204,16 @@ static void draw_columns(void)
                                                          * DIM where they do not play (ui_input.c sd_turn) */
         static const char *const SD_LABEL[4] = {"CHANCE", "RATCH", "NUDGE", "VEL"};
         const step_t *st = &seq_steps(TSEL)[ui.cursor];
+        int hk = sd_note(st);                          /* (1.1.5: a note of the chord held: its own NUDGE and VEL) */
         for (c = 0; c < 4u; c++) {
             uint32_t k = SD_KIND[c];
             int32_t v = ev_sval(st, k), r;
             int on = sd_takes(st, k);
             const char *u = "";
+            if (hk >= 0 && k == EVK_NUDGE)
+                v = step_nd_eff(st, (uint32_t)hk);
+            else if (hk >= 0 && k == EVK_VEL && st->nv[hk])
+                v = st->nv[hk];
             if (k == EVK_CHANCE) {                     /* (1.5.5: a condition, "1:4" "FILL", its card COND) */
                 u = ev_chance_fmt(val, v);
                 r = v > 100 ? (v - 100) * 1000 / (int32_t)NCOND : v * 10;
@@ -1218,12 +1223,12 @@ static void draw_columns(void)
                 r = (v - 1) * 1000 / 3;
             } else if (k == EVK_NUDGE) {
                 ev_nudge_fmt(val, v);
-                u = v ? "/16" : "";
+                u = hk >= 0 ? "NOTE" : v ? "/16" : "";
                 r = (v + 8) * 1000 / 15;
                 on &= ev_nudge_plays(TSEL, st);
             } else {
                 fmt_int(val, v);
-                u = st->flags & SF_ACCENT ? "ACC" : "";
+                u = hk >= 0 ? "NOTE" : st->flags & SF_ACCENT ? "ACC" : "";
                 r = v * 1000 / 127;
                 on &= !(st->flags & SF_ACCENT);
             }

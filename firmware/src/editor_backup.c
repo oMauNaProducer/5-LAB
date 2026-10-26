@@ -8,7 +8,7 @@
  * patches into the user presets restored before it (ids 6, 7), as the first boot after the update does (up_fm6.c).
  * Id 9 is the user presets' FM6 patches (up_fm6.c), appended in 1.0.3.
  * 5-LAB: ids 10 (the music as it is) and 11..14 (slots A..D) are the fifth track's half of ids 0 and 2..5 (project.c
- * PROJ5: 1280 bytes, or none); a restore puts a half after its project, and a half names the project it belongs to
+ * PROJ5: 1280, 1480 or 3400 bytes, or none); a restore puts a half after its project, and a half names the project it belongs to
  * (its link): one that is not the project restored before it is refused. The user samples are ids 32 and 33 (no USR3).
  * 1.0.1 (FUN11) stores a project and its block as ONE flash object: restoring ids 2..5 writes the project with an empty
  * block (valid as it is), the id 11..14 that follows writes it again with its block. The archive itself is unchanged.
@@ -122,7 +122,7 @@ static uint32_t ed_bk_commit(void)
         obj = OBJ_PROJ11_0 + ed_bk_id - 2u;         /* (FUN11: the project alone now; its fifth track's block follows as id 11..14) */
     } else if (ed_bk_id == 10u) {                   /* 5-LAB: the fifth track's half of the music restored with id 0 */
         if (!ed_bk_len) return 0;                   /* (none: the track stays at its power-on sound) */
-        if (ed_bk_len != PROJ5_SIZE && ed_bk_len != PROJ5_OLD) return 2;
+        if (!PROJ5_LEN_OK(ed_bk_len)) return 2;
         project_capture(&proj_scratch);
         if (!proj_unpack5(&proj_scratch, raw, ed_bk_link0)) return 2;
         proj_bound(&proj_scratch);
@@ -130,7 +130,7 @@ static uint32_t ed_bk_commit(void)
     } else if (ed_bk_id >= 11u && ed_bk_id <= 14u) {   /* .. and of a slot's: it must name the FUN10 now there */
         if (ed_bk_len) {                            /* (1.1.4: a block of before ends at PROJ5_OLD: its hash is there, the rest is zero) */
             uint32_t sz = ((const uint32_t *)raw)[1];
-            if ((ed_bk_len != PROJ5_SIZE && ed_bk_len != PROJ5_OLD) || (sz != PROJ5_SIZE && sz != PROJ5_OLD) || sz > ed_bk_len ||
+            if (!PROJ5_LEN_OK(ed_bk_len) || !PROJ5_LEN_OK(sz) || sz > ed_bk_len ||
                 ((const uint32_t *)raw)[0] != PROJ5_MAGIC || ((const uint32_t *)raw)[2] != proj_link(&proj_slot[ed_bk_id - 11u]) ||
                 ((const uint32_t *)raw)[sz / 4u - 1u] != proj_hash(raw, sz - 4u)) return 2;
             if (ed_bk_len < PROJ5_SIZE) { memset(raw + ed_bk_len, 0, PROJ5_SIZE - ed_bk_len); ed_bk_len = PROJ5_SIZE; }
@@ -220,7 +220,7 @@ static uint32_t ed_bk_write(const uint8_t *a, uint32_t n)
             (a[1] >= 2u && a[1] <= 5u && len && !proj_store_len(len)) ||
             ((a[1] == 6u || a[1] == 7u) && len && len != sizeof(up_bank_t)) ||
             (a[1] == 8u && len && len != sizeof(fm6_bank_t)) || (a[1] == 9u && len && len != sizeof(upf_t)) ||
-            (a[1] >= 10u && len && len != PROJ5_SIZE && len != PROJ5_OLD)) return 1;
+            (a[1] >= 10u && len && !PROJ5_LEN_OK(len))) return 1;
         if (ed_flash_stop()) return 3;
         ed_bk_valid = 0; ed_bk_put = 1; ed_bk_id = a[1]; ed_bk_len = len; ed_bk_gen = ++proj_wire_gen;
         ed_bk_crc = ed_bk_r32(a + 7); ed_bk_pos = 0;

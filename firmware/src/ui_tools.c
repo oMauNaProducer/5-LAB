@@ -382,7 +382,7 @@ static void eu_render(track_t *t)                       /* (t: ignored, EUCLID's
                 step_clear(s);
                 s->time = ST_NOTE;
                 if (o)
-                    memcpy(s->note, o->note, sizeof s->note), s->n = o->n;
+                    memcpy(s->note, o->note, sizeof s->note), memcpy(s->nv, o->nv, sizeof s->nv), memcpy(s->nd, o->nd, sizeof s->nd), s->n = o->n;
                 else
                     s->note[0] = (uint8_t)(r > 66 ? r - 12 : r), s->n = 1;
             }

@@ -404,7 +404,7 @@ static int long_64(void)
     ok = proj_pack_pair(&main_raw, &b5, &proj_scratch) || 1;
     project_capture(&proj_scratch);
     ok = proj_pack_pair(&main_raw, &b5, &proj_scratch);
-    bad += check("  packs (the block 1480 bytes)", ok && sizeof b5 == 1480u);
+    bad += check("  packs (the block 3400 bytes)", ok && sizeof b5 == 3400u);
     for (tk = 0; tk < 5u; tk++)
         for (i = 0; i < 64u; i++)
             trk[tk].step[i].ext2 = 0;
