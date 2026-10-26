@@ -317,6 +317,15 @@ def check(img, syms, dis, rt):
     bss = sym("_bss_end") - ram_org
     pool = sym("_pool_end") - sym("_pool_start")
     notes.append(f"image {len(img)} B; RAM .data+.bss {bss} B of {ram_len}; pool {pool} B of {pool_len}")
+    big = []                                      # the biggest variables of RAM (.data / .bss) and the pool, for choosing what to shrink
+    for ln in syms.splitlines():
+        parts = ln.split()
+        for k in range(1, len(parts) - 2):
+            if parts[k] in (".bss", ".data", ".pool") and re.fullmatch(r"[0-9a-f]+", parts[k + 1]):
+                big.append((int(parts[k + 1], 16), parts[-1], parts[k]))
+                break
+    for size, name, sect in sorted(big, reverse=True)[:45]:
+        notes.append(f"  mem {size:7d} B  {sect:6s} {name}")
     if region["RAM"][0] + ram_len != region["POOL"][0]:
         errors.append("app.ld: POOL does not start where RAM ends")
     if ram_len - bss < 4096:                      # keep >= 4 KiB of .bss spare (state the audio side touches)
