@@ -626,6 +626,30 @@ static uint32_t note_split_at(track_t *t, uint32_t i)
         }
     return n;
 }
+/* 1.1.4: the TIE step i is inside the chain of a NOTE step before it: that chord's notes become LONG notes of the lengths they have (their TIEs go: a LONG note
+ * needs none), so a note recorded or played into step i goes on over them, the chord goes on under it, as it was */
+static void note_longify_at(track_t *t, uint32_t i)
+{
+    uint32_t j = i, k, n, l[4];
+    step_t *h;
+    while (j > 0 && t->step[j].time == ST_TIE)
+        j--;
+    h = &t->step[j];
+    if (h->time != ST_NOTE || h->hit || j == i)
+        return;
+    n = note_len(t, j);
+    if (j + n <= i)
+        return;
+    for (k = 0; k < h->n && k < 4u; k++)
+        l[k] = note_len_eff(t, j, k);
+    for (k = 0; k < h->n && k < 4u; k++)
+        if (!step_ext_code(h, k) && l[k] > 1u)
+            step_ext_set(h, k, l[k]);
+    for (k = 1; k < n; k++) {
+        step_clear(&t->step[j + k]);
+        t->step[j + k].time = ST_REST;
+    }
+}
 /* live recording: the note goes into the nearest step, as swung (the one playing, or
  * the next one when it is past the middle of the playing one). Overdub: a step that
  * holds notes gets this one added (a chord of up to 4; when full, the last note is
@@ -639,7 +663,7 @@ static void rec_note(track_t *t, uint32_t note, uint32_t vel)
 {
     uint32_t len = t->p[P_SLEN] > 0 ? (uint32_t)t->p[P_SLEN] : 1u, idx = t->seq_idx % len, k;
     uint32_t period = div_samples((uint32_t)t->p[P_SDIV]), cur = step_samples(t, period, t->seq_idx);
-    uint32_t next = t->seq_pos > cur / 2u, sounds, carried = 0, endmask = 0;
+    uint32_t next = t->seq_pos > cur / 2u, sounds;
     int32_t off = rec_nudge(t->seq_pos >= cur ? 0 : next ? -(int32_t)(cur - t->seq_pos) : (int32_t)t->seq_pos, period);
     step_t *s;
     if (next)
@@ -685,20 +709,13 @@ static void rec_note(track_t *t, uint32_t note, uint32_t vel)
         return;
     }
     if (s->time != ST_NOTE || !s->n || trk_vmode(t) != V_POLY) {
-        if (trk_vmode(t) == V_POLY && !s->n && !s->hit && !t->rh_n && !t->rl_n)
-            carried = note_split_at(t, idx);        /* (1.1.4: a chord passes this step: it is cut here and goes on, this note added to it) */
-        if (carried) {
-            step_set_nudge(s, off);
-            for (k = 0; k < carried; k++)
-                if (!step_ext_code(s, k))
-                    endmask |= 1u << k;             /* (its notes that end with this step: the TIEs of the new note's hold must not carry them on) */
-        } else {
-            s->n = 0;                               /* a fresh step */
-            s->flags = 0;
-            s->vel = 0;
-            step_set_nudge(s, off);
-            tie_masks_fix(t, idx, 4u);              /* (1.1.0: its TIEs, if any, hold every note again) */
-        }
+        if (trk_vmode(t) == V_POLY && s->time == ST_TIE && !t->rh_n && !t->rl_n)
+            note_longify_at(t, idx);                /* (1.1.4: a chord's TIEs pass here: its notes become LONG notes, they go on under this one) */
+        s->n = 0;                                   /* a fresh step */
+        s->flags = 0;
+        s->vel = 0;
+        step_set_nudge(s, off);
+        tie_masks_fix(t, idx, 4u);                  /* (1.1.0: its TIEs, if any, hold every note again) */
     }
     for (k = 0; k < s->n && s->note[k] != note; k++)
         ;
@@ -728,7 +745,7 @@ static void rec_note(track_t *t, uint32_t note, uint32_t vel)
         t->rh_n = 0;
         t->rh_start = (uint8_t)idx;
         t->rh_ties = 0;
-        t->rh_gone = (uint8_t)endmask;
+        t->rh_gone = 0;
     }
     for (k = 0; k < t->rh_n && t->rh_note[k] != note; k++)
         ;

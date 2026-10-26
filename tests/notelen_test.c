@@ -478,9 +478,8 @@ static int rec_add(void)
     for (i = 0; i < 3u; i++) step_ext_set(&t->step[0], i, 12);
     song.rec = 1; song.playing = 1;
     rec_at(t, 8, 0); rec_note(t, 72, 100);
-    ok = t->step[8].n == 4 && t->step[8].note[0] == 60 && t->step[8].note[3] == 72 && note_len_eff(t, 0, 1) == 8 &&
-         note_len_eff(t, 8, 0) == 4 && note_len_eff(t, 8, 2) == 4;
-    bad += check("rec add: a note into a long chord's step: the chord cut there, the notes go on with the new one", ok);
+    ok = t->step[8].n == 1 && t->step[8].note[0] == 72 && note_len_eff(t, 0, 1) == 12 && note_len_eff(t, 0, 0) == 12 && step_ext_code(&t->step[0], 2) == 12;
+    bad += check("rec add: a note into a long chord's step: only the note is added, the chord goes on under it", ok);
     rec_release(t, 72);
     /* the same on TIEs, the new note held three steps */
     clear16(t);
@@ -490,8 +489,9 @@ static int rec_add(void)
     rec_at(t, 6, 0); rec_hold(t, 6, 16);
     rec_at(t, 7, 0); rec_hold(t, 7, 16);
     rec_release(t, 72);
-    ok = t->step[5].n == 3 && note_len_eff(t, 0, 0) == 5 && note_len_eff(t, 5, 0) == 3 && note_len_eff(t, 5, 2) == 2;   /* (the new note held 2 steps) */
-    bad += check("rec add: on TIEs: cut at step 6, the chord from it with the new note", ok);
+    ok = t->step[5].n == 1 && t->step[5].note[0] == 72 && note_len_eff(t, 0, 0) == 8 && note_len_eff(t, 0, 1) == 8 && note_len_eff(t, 5, 0) == 2 &&
+         t->step[1].time == ST_REST;
+    bad += check("rec add: on TIEs: the chord's notes become LONG (8 steps), the new note on step 6 over them", ok);
     song.rec = 0; song.playing = 0;
     return bad;
 }
