@@ -141,9 +141,8 @@ static int knobs(void)
     ok &= step_chance(&t->step[2]) == 90u && step_nudge(&t->step[2]) == 3 && t->step[2].vel == 80u &&
           t->step[2].n == 1u && t->step[2].note[0] == 64u && t->step[2].time == ST_NOTE && step_ratchet(&t->step[2]) == 1u;
     bad += check("  PRESETS walks the cursor; on step 3 CHANCE 90 %, NUDGE +3, VEL 80 (96 - 16), the note kept", ok);
-    ok = listed(EVC(EVK_RATCH, 0)) && listed(EVC(EVK_CHANCE, 0)) && listed(EVC(EVK_CHANCE, 2)) &&
-         listed(EVC(EVK_NUDGE, 2)) && !listed(EVC(EVK_RATCH, 2)) && !motion_count(t);
-    bad += check("  AUTOMATION lists them as rows (CHANCE, RATCH, NUDGE; no motion record used)", ok);
+    ok = !listed(EVC(EVK_RATCH, 0)) && !listed(EVC(EVK_CHANCE, 0)) && !listed(EVC(EVK_NUDGE, 2)) && !motion_count(t);
+    bad += check("  AUTOMATION (1.1.4) does not list them (no rows, no motion record used)", ok);
     turn(EN_PRESET, -2);
     kt(EN_K2, -1);
     kt(EN_K1, 1);
@@ -238,14 +237,6 @@ static int edit_undo(void)
     ok &= !memcmp(t->step, ref, sizeof ref);
     bad += check("EDIT: the step's CHANCE RATCH NUDGE VEL back to 100 % x1 0 96 (the note and the cursor stay; again: "
                  "NOTHING TO RESET); SAVE held brings them back", ok);
-    {   /* AUTOMATION's EDIT deletes a row of them one by one (1.2, unchanged) */
-        go_auto_top(); frame();
-        ok = auto_pick(EVC(EVK_RATCH, 0));
-        press(B_EDIT);
-        ok &= step_ratchet(&t->step[0]) == 1u && !listed(EVC(EVK_RATCH, 0)) && listed(EVC(EVK_CHANCE, 0)) &&
-              listed(EVC(EVK_NUDGE, 0)) && msg_is("DELETED");
-        bad += check("AUTOMATION: EDIT on a row deletes that entry alone (RATCH x1; the step's CHANCE and NUDGE stay)", ok);
-    }
     return bad;
 }
 

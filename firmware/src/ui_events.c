@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
-/* Felucca SEQ > AUTOMATION (1.1.5 AUTO LIST; 1.2, Discussion #153: the AUTOMATION page, CHANCE and RATCH merged into it;
+/* 5-LAB 1.1.4: the STEP and VEL rows below (a step's CHANCE, RATCH, NUDGE, VEL) are no longer listed nor offered by + ADD (ev_id_ok refuses them):
+ * DETAIL edits those fields; the list is PLAY, REC, QUANTIZE, RAMP, the LOCK / AUTO records, + ADD.
+ * Felucca SEQ > AUTOMATION (1.1.5 AUTO LIST; 1.2, Discussion #153: the AUTOMATION page, CHANCE and RATCH merged into it;
  * 1.2, #162: NUDGE and QUANTIZE too; 1.5, #173: VEL; included by ui.c): the selected track's automation as a list.
  * The rows:
  *   PLAY     the first: the track's automation ON / OFF (KNOB 4; OFF keeps it) and its counts; OCT+ CLEAR asks
@@ -61,7 +63,7 @@ static int ev_id_ok(const track_t *t, uint32_t id)
 {
     const param_desc_t *d;
     if (ev_sid(id))
-        return 1;
+        return 0;                                       /* (1.1.4: a step's CHANCE, RATCH, NUDGE, VEL are DETAIL's: not rows, not + ADD's) */
     if (id >= P_COUNT || !motion_param(id) || id == P_ED_FX || (id >= P_FM1_ATK && id <= P_FM4_LEVEL))
         return 0;
     if (id >= P_LN0 && id <= P_LN7)
@@ -193,17 +195,12 @@ static uint32_t ev_list(uint16_t *rw)
 {
     const track_t *t = TSEL;
     uint8_t idx[MOTION_MAX];
-    uint32_t m = motion_rows(song.sel, idx), len = ev_len(t), n = 0, j = 0, s, k;
-    static const uint8_t SK[4] = {EVK_CHANCE, EVK_RATCH, EVK_NUDGE, EVK_VEL};
+    uint32_t m = motion_rows(song.sel, idx), n = 0, j = 0, s;
     rw[n++] = EVC(EVK_TOP, 0);
     rw[n++] = EVC(EVK_ARM, 0);
     rw[n++] = EVC(EVK_QNT, 0);
     rw[n++] = EVC(EVK_RMP, 0);
     for (s = 0; s < NSTEP; s++) {
-        for (k = 0; s < len && k < 4u; k++)
-            if ((k == 3u ? ui.ev_vel && ev_vel_row(&t->step[s]) : !ev_sdef(&t->step[s], SK[k])) ||
-                ui.ev_keep == EVC(SK[k], s))
-                rw[n++] = EVC(SK[k], s);
         for (; j < m && (motion.event[idx[j]].place & 63u) == s; j++)
             rw[n++] = EVC(EVK_REC, idx[j]);
     }

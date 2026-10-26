@@ -282,7 +282,7 @@ static int cond_ui(void)
     for (r = 0; r < n; r++)
         found |= rw[r] == EVC(EVK_CHANCE, 2);
     ui.force = 1; frame();
-    bad += check("AUTOMATION: the condition is the step's CHANCE row (\"STEP 03 COND 2:3\")", found != 0u);
+    bad += check("AUTOMATION (1.1.4): the condition has no row there (it is DETAIL\'s)", found == 0u);   /* (1.1.4: it is DETAIL's alone) */
     go_page_title("DETAIL");
     ui.cursor = 2;
     press(B_EDIT);

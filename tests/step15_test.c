@@ -208,49 +208,8 @@ static int vel(void)
     for (n = 0; n < 16u; n += 4u)
         t->step[n] = (step_t){{(uint8_t)(48 + n)}, 1, ST_NOTE, 0, 100};   /* recorded from the panel's keys: 100 */
     t->step[8].flags = SF_ACCENT;
-    t->step[20] = (step_t){{70}, 1, ST_NOTE, 0, 30};                     /* past LEN */
-    memcpy(ref, t->step, sizeof ref);
     go_auto_top(); frame();
-    ok = ev_list(rw) == 5u;
-    go_auto_add(EV_VEL, 4); frame();
-    ok &= str_eq(act_name(4), "SHOW");
-    press(B_OCTUP);
-    n = ev_list(rw);
-    ok &= msg_is("VEL SHOWN") && n == 9u && rw[4] == EVC(EVK_VEL, 0) && rw[5] == EVC(EVK_VEL, 4) &&
-          rw[7] == EVC(EVK_VEL, 12) && auto_cur() == EVC(EVK_VEL, 4) && !memcmp(t->step, ref, sizeof ref);
-    bad += check("AUTOMATION: no VEL rows; + ADD VEL OCT+ (SHOW): one per note step inside LEN, nothing changed", ok);
-    turn(EN_K4, -10);
-    ok = t->step[4].vel == 90u && same_but(t, ref, 4, 4);
-    frames(2000);
-    turn(EN_K4, 100);
-    ok &= t->step[4].vel == 127u;
-    turn(EN_K2, 1);
-    ok &= t->step[4].vel == 127u && t->step[5].vel == 0u && auto_cur() == EVC(EVK_VEL, 4);
-    hold(B_SAVE);
-    ok &= t->step[4].vel == 90u;
-    bad += check("  KNOB 4 the step's velocity (1..127), KNOB 2 nothing; SAVE held: the turn undone", ok);
-    press(B_EDIT);
-    ok = t->step[4].vel == 0u && msg_is("VEL 96") && auto_cur() == EVC(EVK_VEL, 4) && ev_list(rw) == n;
-    for (n = 0; n < 20u; n++)
-        turn(EN_K4, -1);
-    ok &= t->step[4].vel == 76u;
-    bad += check("  EDIT: back to 96 (stored 0), the row stays", ok);
-    {   /* drawn: DIM where it does not play (the ACC step) */
-        ok = auto_pick(EVC(EVK_VEL, 8)) && !ev_vel_plays(&t->step[8]) && ev_vel_plays(&t->step[4]);
-        bad += check("  an ACC step's VEL does not play (DIM)", ok);
-    }
-    ui.ev_row = 0xFFFFu;                              /* + ADD, on the page (go_auto_add enters it again) */
-    ui.ev_id = EV_VEL;
-    frame();
-    ok = str_eq(act_name(4), "HIDE");
-    press(B_OCTUP);
-    ok &= msg_is("VEL HIDDEN") && ev_list(rw) == 5u;
-    press(B_OCTUP);
-    ok &= ev_list(rw) > 5u;
-    go_home(); frame();
-    go_auto_top(); frame();
-    ok &= ev_list(rw) == 5u;
-    bad += check("  HIDE hides them; leaving the page too", ok);
+    bad += check("AUTOMATION (1.1.4): no VEL rows (DETAIL has them); the list is PLAY, REC, QUANTIZE, RAMP, + ADD", ev_list(rw) == 5u);
     return bad;
 }
 

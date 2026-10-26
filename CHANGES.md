@@ -24,6 +24,8 @@ Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything n
 - **Recording into a long chord.** A note played (REC) into a step that a chord passes through (second pass over a chord recorded from its first step) is **added over it**: the chord is
   not cut or replaced. The notes of a chord made of TIEs become LONG notes of the lengths they had (so they can go on under the new note), and the new note is its own step.
 - **No duplicate under a long note.** The same pitch played (REC) into a step that a LONG note (or a note's TIEs) of that pitch already lasts through is not recorded under it any more. Step entry (REC armed, stopped) does the same, and a step entered into a chord's TIEs makes that chord LONG notes instead of cutting it.
+- **AUTOMATION list: only locks and events.** The rows for a step's CHANCE, RATCH, NUDGE and VEL are gone from SEQ > AUTOMATION (and from + ADD): they were the same fields DETAIL edits.
+  The list is PLAY, REC, QUANTIZE, RAMP, the LOCK / AUTO records by step, + ADD. Nothing stored changes (those fields live in the step), and EDIT / CLEAR on the page are as before.
 - **Fix (since 1.1.3):** the notes 3 and 4 of a chord did not redraw the screen while their LEN was turned (only when the key was let go): the step hash that decides a redraw did not include `ext`.
 - Tests: `tests/notelen_test.c` (`len64`: a chord of 4 to step 63 on the 5 tracks, saved, loaded, and the 1280-byte block).
 

@@ -2764,72 +2764,19 @@ static int test_page_cycles(void)
     n0 = ev_list(rw);
     ok = n0 == 5u && rw[0] == EVC(EVK_TOP, 0) && rw[1] == EVC(EVK_ARM, 0) && rw[2] == EVC(EVK_QNT, 0) &&
          rw[3] == EVC(EVK_RMP, 0) && rw[4] == EVC(EVK_ADD, 0);
-    go_auto_add(EV_CHANCE, 3); frame();
-    press(B_OCTUP);
-    want = ref[3]; step_set_chance(&want, 50);
-    ok &= steps_but(TSEL, ref, 3, &want) && auto_cur() == EVC(EVK_CHANCE, 3) && msg_is("CHANCE ADDED") && !motion_count(TSEL);
-    bad += check("AUTOMATION + ADD CHANCE: step 4's CHANCE 50 %, nothing else; its row selected", ok);
-    turn(EN_K4, 10);
-    want = ref[3]; step_set_chance(&want, 60);
-    ok = steps_but(TSEL, ref, 3, &want);
-    turn(EN_K2, 1);                                     /* to step 5 (at its default): step 4 back to 100 % */
-    want = ref[4]; step_set_chance(&want, 60);
-    ok &= steps_but(TSEL, ref, 4, &want) && auto_cur() == EVC(EVK_CHANCE, 4);
-    bad += check("  KNOB 4 the CHANCE, KNOB 2 moves it to the next step (the old one back to 100 %)", ok);
-    hold(B_SAVE);
-    want = ref[3]; step_set_chance(&want, 60);
-    ok = steps_but(TSEL, ref, 3, &want) && !memcmp(TSEL->p, p0, sizeof p0);
-    hold(B_SAVE);
-    want = ref[4]; step_set_chance(&want, 60);
-    ok &= steps_but(TSEL, ref, 4, &want) && !memcmp(TSEL->p, p0, sizeof p0);
-    bad += check("  SAVE held: the move undone (the sound and LEN untouched); held again: redone", ok);
-    turn(EN_K4, 1000);                                  /* back at 100 %: the row stays while edited */
-    ok = steps_but(TSEL, ref, 0xFFu, 0) && auto_cur() == EVC(EVK_CHANCE, 4);
-    turn(EN_K1, -1);                                    /* (another row: it leaves the list) */
-    ok &= auto_cur() == EVC(EVK_RMP, 0) && ev_list(rw) == 5u;
-    bad += check("  at 100 % it stays listed while edited; another row picked: gone (nothing stored)", ok);
-    memcpy(ref, TSEL->step, sizeof ref);
-    go_auto_add(EV_RATCH, 6); frame();
-    press(B_OCTUP);
-    turn(EN_K4, 1); turn(EN_K4, 1); turn(EN_K4, 1);     /* x2 -> x4 (the end holds) */
-    want = ref[6]; step_set_ratchet(&want, 4);
-    ok = steps_but(TSEL, ref, 6, &want) && auto_cur() == EVC(EVK_RATCH, 6) && step_chance(&TSEL->step[6]) == 100u;
-    hold(B_SAVE);                                       /* the turn (one undo): x2 again */
-    want = ref[6]; step_set_ratchet(&want, 2);
-    ok &= steps_but(TSEL, ref, 6, &want);
-    hold(B_SAVE);
-    press(B_EDIT);                                      /* EDIT: back to x1 */
-    ok &= steps_but(TSEL, ref, 0xFFu, 0) && msg_is("DELETED");
-    hold(B_SAVE);
-    want = ref[6]; step_set_ratchet(&want, 4);
-    ok &= steps_but(TSEL, ref, 6, &want);
-    bad += check("AUTOMATION RATCH: + ADD x2, KNOB 4 to x4, EDIT x1; each one undo (SAVE held), the step's flags only", ok);
-    {   /* the order: PLAY, REC, QUANTIZE, RAMP, then by step (CHANCE, RATCH, NUDGE, the records), + ADD; a lock on the same step
-         * after them */
-        go_auto_add(EV_CHANCE, 6); frame(); press(B_OCTUP);
-        go_auto_add(EV_NUDGE, 6); frame(); press(B_OCTUP);
-        motion_set_lock(TSEL, 6, P_ATK, 3);
-        motion_set_lock(TSEL, 2, P_ATK, 5);
-        n0 = ev_list(rw);
-        ok = n0 == 10u && rw[0] == EVC(EVK_TOP, 0) && rw[1] == EVC(EVK_ARM, 0) && rw[2] == EVC(EVK_QNT, 0) &&
-             rw[3] == EVC(EVK_RMP, 0) && rw[4] >> 8 == EVK_REC && rw[5] == EVC(EVK_CHANCE, 6) && rw[6] == EVC(EVK_RATCH, 6) &&
-             rw[7] == EVC(EVK_NUDGE, 6) && rw[8] >> 8 == EVK_REC && rw[9] == EVC(EVK_ADD, 0);
-        go_auto_add(EV_CHANCE, 6); frame(); press(B_OCTUP);
-        ok &= msg_is("ALREADY LISTED") && auto_cur() == EVC(EVK_CHANCE, 6);
-        bad += check("  the rows: PLAY, REC, QUANTIZE, RAMP, by step (CHANCE, RATCH, NUDGE, then its locks / events), + ADD; one there: "
-                     "ALREADY LISTED", ok);
-        auto_pick(EVC(EVK_NUDGE, 6));
-        press(B_EDIT);                                  /* (the NUDGE out again: the rest as before) */
-        ok = step_nudge(&TSEL->step[6]) == 0;
-        bad += check("  EDIT on the NUDGE row: back to 0", ok);
-    }
-    memcpy(ref, TSEL->step, sizeof ref);
-    chain.running = 1;
-    auto_pick(EVC(EVK_CHANCE, 6));
-    turn(EN_K4, 5); press(B_EDIT);
-    ok = steps_but(TSEL, ref, 0xFFu, 0) && msg_is("STOP TO EDIT");
-    chain.running = 0;
-    bad += check("  while a song plays: STOP TO EDIT, nothing changes", ok);
+    bad += check("AUTOMATION (1.1.4): the rows are PLAY, REC, QUANTIZE, RAMP, + ADD (a step's CHANCE, RATCH, NUDGE, VEL are DETAIL's)", ok);
+    step_set_chance(&TSEL->step[3], 50); step_set_nudge(&TSEL->step[3], 2); step_set_ratchet(&TSEL->step[3], 2);
+    TSEL->step[3].vel = 70;
+    ok = ev_list(rw) == 5u;
+    motion_set_lock(TSEL, 6, P_ATK, 3);
+    motion_set_lock(TSEL, 2, P_ATK, 5);
+    n0 = ev_list(rw);
+    ok &= n0 == 7u && rw[4] >> 8 == EVK_REC && rw[5] >> 8 == EVK_REC && rw[6] == EVC(EVK_ADD, 0) &&
+          (motion.event[rw[4] & 0xFFu].place & 63u) == 2u && (motion.event[rw[5] & 0xFFu].place & 63u) == 6u;
+    bad += check("  only the locks / events are rows, by step; a step's own fields add none", ok);
+    ui.ev_id = EV_CHANCE; ui.ev_row = 0xFFFFu; ev_fix();
+    ok = ui.ev_id != EV_CHANCE && ui.ev_id != EV_NUDGE && ui.ev_id != EV_RATCH && ui.ev_id != EV_VEL;
+    bad += check("  + ADD never offers them (CHANCE is not a choice)", ok);
     return bad;
 }
 
@@ -2926,10 +2873,10 @@ static int test_product_ux(void)
             ok &= !page_visible(i);
     bad += check("DIGITAL retired: engine 1 asked for loads FM6; the OP ENV / OP LEVEL pages never show", ok);
 #endif
-    ui_power_on(); go_auto_add(EV_CHANCE, 0); press(B_OCTUP); turn(EN_K4, 15);
+    ui_power_on(); step_set_chance(&TSEL->step[0], 65);
     bad += check("CHANCE is per step and starts at backward-compatible 100 percent", step_chance(&TSEL->step[0]) == 65 && step_chance(&TSEL->step[1]) == 100);
-    turn(EN_K4, -1000); ok = step_chance(&TSEL->step[0]) == 0;
-    turn(EN_K4, 1000); ok &= step_chance(&TSEL->step[0]) == 100;
+    step_set_chance(&TSEL->step[0], 0); ok = step_chance(&TSEL->step[0]) == 0;
+    step_set_chance(&TSEL->step[0], 1000); ok &= step_chance(&TSEL->step[0]) == 100 && step_chance(&TSEL->step[1]) == 100;
     bad += check("CHANCE controls clamp to 0..100 without changing adjacent steps", ok);
     ui_power_on(); song.rec = 1; seq_start(); go_home();
     int16_t baseline;
@@ -4257,11 +4204,7 @@ static int test_bughunt_ui(void)
         ok = !memcmp(&s0, &TSEL->step[0], sizeof s0) && ui.cursor == 0u;
         press(B_EDIT);
         ok &= !memcmp(&s0, &TSEL->step[0], sizeof s0) && !msg_is("STEP CLEARED");
-        ui_power_on(); go_auto_add(EV_CHANCE, 0); frame();
-        s0 = TSEL->step[0];
-        press(B_OCTUP);                                 /* (100 % by default: + ADD CHANCE, 50 %) */
-        bad += check("AUTOMATION on a melodic track: a key writes no step, EDIT clears none; + ADD CHANCE the chance",
-                     ok && step_chance(&TSEL->step[0]) != step_chance(&s0));
+        bad += check("AUTOMATION on a melodic track: a key writes no step, EDIT clears none", ok);
         ui_power_on(); go_page(GR_ROLL); frame(); song.rec = 1;   /* (#133: armed, stopped) */
         tap_key(white(5)); frame();
         bad += check("  STEP still: armed, a key writes the cursor step", step_on(&TSEL->step[0]) || TSEL->step[0].n);

@@ -296,34 +296,7 @@ static int screens(void)
     uint32_t x, y;
     ui_power_on();
     t = TSEL;
-    go_auto_add(EV_RATCH, 0);                        /* (1.2: SEQ > AUTOMATION, + ADD RATCH: x2, its row) */
-    press(B_OCTUP);
-    turn(EN_K4, 1);
-    ok = step_ratchet(&t->step[0]) == 3u && step_ratchet(&t->step[1]) == 1u;
-    turn(EN_K4, 100);
-    ok &= step_ratchet(&t->step[0]) == 4u;
-    turn(EN_K4, -100);
-    bad += check("SEQ > AUTOMATION's RATCH row, KNOB 4: RATCH of its step, x1..x4", ok && step_ratchet(&t->step[0]) == 1u &&
-                 step_chance(&t->step[0]) == 100u);
-    {                                                /* RATCH dimmed where it does nothing: REST, TIE, empty */
-        uint32_t dim[4], thm[4], k;
-        static const step_t kind[4] = {
-            {{60}, 1, ST_NOTE, 0, 100}, {{0}, 0, ST_REST, 0, 0}, {{0}, 0, ST_TIE, 0, 0}, {{0}, 0, ST_NOTE, 0, 0}};
-        for (k = 0; k < 4u; k++) {
-            t->step[0] = kind[k];
-            step_set_ratchet(&t->step[0], 2);
-            memset(host_screen, 0, sizeof host_screen); ui.force = 1; ui_draw();
-            dim[k] = card_px(3, T_DIM); thm[k] = card_px(3, T_THEME);
-        }
-        t->step[0] = kind[3]; t->step[0].hit = 1u;   /* a NOTE step of lane hits only: it plays */
-        step_set_ratchet(&t->step[0], 2);
-        memset(host_screen, 0, sizeof host_screen); ui.force = 1; ui_draw();
-        ok = card_px(3, T_DIM) == dim[0] && card_px(3, T_THEME) == thm[0];
-        for (k = 1; k < 4u; k++)
-            ok &= dim[k] > dim[0] && thm[k] < thm[0];
-        bad += check("  RATCH shows dimmed on a REST, a TIE or an empty step (a note or a hit: not)", ok);
-        t->step[0] = (step_t){{0}, 0, ST_REST, 0, 0};
-    }
+    /* (1.1.4: the RATCH row of AUTOMATION is gone: DETAIL edits it; its checks went with it) */
     ui_power_on();                                   /* the piano roll: x2 in two bars, the middle column empty */
     t = TSEL;
     track_defaults_steps(t);
