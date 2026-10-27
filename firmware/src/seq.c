@@ -468,6 +468,12 @@ static __attribute__((noinline)) int32_t rec_nudge(int32_t off, uint32_t period)
 {
     return (off * NUDGE_DIV + (off < 0 ? -(int32_t)period / 2 : (int32_t)period / 2)) / (int32_t)(period ? period : 1u);
 }
+/* 1.1.7: the same in 1/ND_FINE of the step (-64..+63): where a note was played, to 1/128 of the step */
+static __attribute__((noinline)) int32_t rec_nudge_fine(int32_t off, uint32_t period)
+{
+    int32_t v = (off * ND_FINE + (off < 0 ? -(int32_t)period / 2 : (int32_t)period / 2)) / (int32_t)(period ? period : 1u);
+    return v < -64 ? -64 : v > 63 ? 63 : v;
+}
 
 /* ---- 5-LAB: the chords' lengths (moved here from ui.c in 1.1.4: the recording cuts a chord too) ---- */
 static void step_clear(step_t *st)
@@ -680,7 +686,8 @@ static void rec_note(track_t *t, uint32_t note, uint32_t vel)
     uint32_t len = t->p[P_SLEN] > 0 ? (uint32_t)t->p[P_SLEN] : 1u, idx = t->seq_idx % len, k;
     uint32_t period = div_samples((uint32_t)t->p[P_SDIV]), cur = step_samples(t, period, t->seq_idx);
     uint32_t next = t->seq_pos > cur / 2u, sounds, added;
-    int32_t off = rec_nudge(t->seq_pos >= cur ? 0 : next ? -(int32_t)(cur - t->seq_pos) : (int32_t)t->seq_pos, period);
+    int32_t at = t->seq_pos >= cur ? 0 : next ? -(int32_t)(cur - t->seq_pos) : (int32_t)t->seq_pos;
+    int32_t off = rec_nudge(at, period), fine = rec_nudge_fine(at, period);
     step_t *s;
     if (next)
         idx = (idx + 1u) % len;
@@ -748,8 +755,8 @@ static void rec_note(track_t *t, uint32_t note, uint32_t vel)
             step_ext_set(s, 3, 0);                  /* (full: the last note is replaced, with its length) */
         s->note[s->n - 1u] = (uint8_t)note;
         step_pn_new(s, s->n - 1u);
+        step_set_note_nd(s, s->n - 1u, fine - step_nudge(s) * ND_SIX);   /* (1.1.7: where it was played, to 1/128 of the step) */
         if (added) {
-            step_set_note_nd(s, s->n - 1u, off - step_nudge(s));
             s->nv[s->n - 1u] = vel != s->vel ? (uint8_t)clamp((int32_t)vel, 1, 127) : 0u;
         }
     }
@@ -1438,11 +1445,11 @@ static int seq_miss(const track_t *t, const step_t *s, uint32_t idx)
 #define SEQ_ROLLED (1u << 17)   /* seq_tick rolled the chance already (before the step's parameter locks): it passed */
 #define SEQ_MISS (1u << 18)     /* .. it failed: nothing plays */
 #define SEQ_NOND (1u << 19)     /* 1.1.5: the notes' own NUDGE does not apply (STEP PREVIEW) */
-/* 1.1.5: when a step plays off its start (QUANTIZE OFF, x1): its earliest note's NUDGE (the step's plus the note's own, kept in -8..+7) is the step's; the lane hits go
- * with the step's. The later notes start after the difference (seq_step) */
+/* 1.1.5: when a step plays off its start (QUANTIZE OFF, x1): its earliest note's NUDGE (the step's plus the note's own, kept in -1/2..+1/2 step) is the step's; the lane hits go
+ * with the step's. The later notes start after the difference (seq_step). In 1/ND_FINE of the step (1.1.7; 1.1.5: 1/16) */
 static int32_t step_nd_min(const step_t *s)
 {
-    int32_t m = s->hit || !s->n ? step_nudge(s) : 127;
+    int32_t m = s->hit || !s->n ? step_nudge(s) * ND_SIX : 127;
     uint32_t k;
     for (k = 0; k < s->n && k < 4u; k++)
         if (step_nd_eff(s, k) < m)
@@ -1499,7 +1506,7 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
     memset(t->seq_hp, 0, sizeof t->seq_hp);
     if (!t->p[P_SQNT] && hits == 1u && !(skip & (SEQ_REP | SEQ_NOND)) && !(s->flags & SF_SLIDE) && !next_tie) {
         ndon = 1;                                   /* (1.1.5: the notes' own NUDGE: a held / slid step plays its notes together) */
-        base = (uint32_t)(step_nd_min(s) + 8);
+        base = (uint32_t)(step_nd_min(s) + 64);
         cur_len = step_samples(t, period, idx);
     }
     if (hits == 1u && song.playing)
@@ -1526,8 +1533,8 @@ static __attribute__((noinline)) void seq_step(track_t *t, const step_t *s, uint
         nn[m] = (uint8_t)x;
         vv[m] = (uint8_t)(s->nv[i] ? s->nv[i] : vel);   /* (1.1.5: the note's own VEL) */
         if (ndon) {
-            uint32_t e = (uint32_t)(step_nd_eff(s, i) + 8) - base;
-            ddl[m] = e ? (uint32_t)clamp((int32_t)(e * period / NUDGE_DIV), 1, (int32_t)(cur_len > 1u ? cur_len - 1u : 1u)) : 0u;
+            uint32_t e = (uint32_t)(step_nd_eff(s, i) + 64) - base;
+            ddl[m] = e ? (uint32_t)clamp((int32_t)(e * period / ND_FINE), 1, (int32_t)(cur_len > 1u ? cur_len - 1u : 1u)) : 0u;
         }
         sk |= ((skip >> i) & 1u) << m;
         m++;
@@ -1611,7 +1618,7 @@ static __attribute__((noinline)) void seq_ratchet(track_t *t, uint32_t period)
     seq_step(t, s, t->seq_idx, period, SEQ_REP);
 }
 
-/* the nudge of step s in 1/NUDGE_DIV of the step (NUDGE, core.h) when it plays off its start: the track's QUANTIZE OFF,
+/* the nudge of step s in 1/ND_FINE of the step (1.1.7; NUDGE, core.h: the step's own is in 1/NUDGE_DIV) when it plays off its start: the track's QUANTIZE OFF,
  * a NOTE step that plays something, x1 (a ratcheted step's parts divide the step: on its start); else 0 */
 /* 1.1.5: the notes' own NUDGE applies to step s (the piano roll draws it too): QUANTIZE OFF, a NOTE step, x1, not held on (a slide, a TIE after) */
 static int seq_nd_pn(const track_t *t, const step_t *s)
@@ -1625,7 +1632,7 @@ static int32_t seq_nudge(const track_t *t, const step_t *s)
 {
     if (t->p[P_SQNT] || s->time != ST_NOTE || (!s->n && !s->hit) || step_ratchet(s) != 1u)
         return 0;
-    return seq_nd_pn(t, s) ? step_nd_min(s) : step_nudge(s);   /* (1.1.5: held on: the notes play together) */
+    return seq_nd_pn(t, s) ? step_nd_min(s) : step_nudge(s) * ND_SIX;   /* (1.1.5: held on: the notes play together) */
 }
 
 /* 1.5.6 (#213): the matrix's TIME on step idx: how late it plays (samples, 0: on time). A NOTE step that plays
@@ -1718,13 +1725,13 @@ static __attribute__((noinline)) void seq_nd_start(track_t *t, uint32_t period, 
         uint32_t h = seq_time(t, t->seq_idx, period);
         d = seq_nudge(t, &seq_steps(t)[t->seq_idx]);
         if (d > 0 || h)
-            t->nd_late = (uint32_t)(d > 0 ? d : 0) * period / NUDGE_DIV + h + 1u;
+            t->nd_late = (uint32_t)(d > 0 ? d : 0) * period / ND_FINE + h + 1u;
         else
             seq_play(t, t->seq_idx, period);
     }
     t->nd_fired = 0;
     if ((!chain.running || nx) && (d = seq_nudge(t, &seq_steps(t)[nx])) < 0) {
-        uint32_t at = step_samples(t, period, t->seq_idx), back = (uint32_t)-d * period / NUDGE_DIV;
+        uint32_t at = step_samples(t, period, t->seq_idx), back = (uint32_t)-d * period / ND_FINE;
         at = (at > back ? at - back : 0u) + 1u;
         t->nd_early = at < t->nd_late ? t->nd_late : at;   /* (never before this step's own late play) */
     }

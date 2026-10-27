@@ -1,11 +1,25 @@
 # 5-LAB: changes from Felucca 1.6.1
 
 5-LAB is a fork of [Felucca](https://github.com/hugelton/Felucca) 1.6.1 by Leo Kuroshita (Hügelton Instruments), GPL-3.0-only like the
-original. **Version 1.1.6** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
+original. **Version 1.1.7** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
 Five audio tracks, every engine on all five; the lab is for trying things out.
 
 Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything not listed here is Felucca 1.6.1 as it was
 (the sound is the same: the 98 golden renders of `tests/golden.txt` are unchanged).
+
+## 1.1.7: fine onsets (1/128 of a step)
+
+- **Where each note was played, to 1/128 of the step.** A note's own NUDGE was a nibble of 1/16 of the step; it is now a byte, 1/128 (-128..+127, added to the step's coarse NUDGE, the sum kept inside
+  half a step either way). Live recording keeps every note's exact place: the step still gets its coarse 1/16 NUDGE (what DETAIL, the roll and older projects use), and the notes (the first too) the
+  remainder. At DIV 1/16 and 120 BPM that is about 1 ms (was up to 4 ms); at DIV 1/4 about 4 ms (was up to 15). Fast notes in one step keep the spacing played. Idea from Melodee's
+  recording (onsets stored as a fraction of the step), by Kerem Kilic, GPL-3.0; none of its code is used.
+- **Playing and drawing** use the fine value: the later notes of a step start `difference x period / 128` samples after the earliest; the piano roll moves each bar by it. The step's own early / late
+  play (QUANTIZE OFF) is computed in 1/128 too (the same result for a step with no per-note values).
+- **DETAIL:** with a note's key held, KNOB 3 still moves in 1/16 (it shows the nearest 1/16; a turn lands on a 1/16, so a fine value stays until you touch it).
+- **Storage (the saved format changes).** `step_t` is 2 bytes bigger (`nd[4]`: a byte a note). PROJ5 is **4040 bytes** (8 bytes a step: VEL 4, NUDGE 4), the FUN11 object 7880 of its 7936.
+  Projects of 1.1.5 / 1.1.6 (3400), 1.1.4 (1480) and 1.1.0 .. 1.1.3 (1280) **open** (a nibble of n sixteenths is n x 8 in 1/128); one saved now does **not open in 1.1.6 or before**.
+  The block is nearly at the object's limit: a note's own CHANCE / RATCH will need another layout.
+- **Memory:** about 640 B more RAM and 3 KB more pool (the steps kept, the block copies).
 
 ## 1.1.6: a note's own NUDGE on the piano roll
 
@@ -27,6 +41,7 @@ Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything n
   saved now does **not open in 1.1.4 or before**. The editor's backup takes all three sizes. An editor that writes a step (STEP_SET) clears that step's per-note values.
 - **Memory.** About 5 KB more RAM and 17 KB more pool (the steps kept, the block copies); the numbers are checked by `build.py` (RAM 4096, pool 8192), not measured on the host.
 - Not yet: a note's own CHANCE and RATCH (the roll shows the NUDGE since 1.1.6).
+- (1.1.5 stored the notes' NUDGE as a nibble of 1/16; 1.1.7 as a byte of 1/128.)
 
 ## 1.1.4: every note, 2 to 64 steps
 

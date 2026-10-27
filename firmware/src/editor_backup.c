@@ -8,7 +8,7 @@
  * patches into the user presets restored before it (ids 6, 7), as the first boot after the update does (up_fm6.c).
  * Id 9 is the user presets' FM6 patches (up_fm6.c), appended in 1.0.3.
  * 5-LAB: ids 10 (the music as it is) and 11..14 (slots A..D) are the fifth track's half of ids 0 and 2..5 (project.c
- * PROJ5: 1280, 1480 or 3400 bytes, or none); a restore puts a half after its project, and a half names the project it belongs to
+ * PROJ5: 1280, 1480, 3400 or 4040 bytes, or none); a restore puts a half after its project, and a half names the project it belongs to
  * (its link): one that is not the project restored before it is refused. The user samples are ids 32 and 33 (no USR3).
  * 1.0.1 (FUN11) stores a project and its block as ONE flash object: restoring ids 2..5 writes the project with an empty
  * block (valid as it is), the id 11..14 that follows writes it again with its block. The archive itself is unchanged.

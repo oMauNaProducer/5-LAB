@@ -195,7 +195,7 @@ static int32_t pr_note_dx(const step_t *st, uint32_t j)
     if (!pr_tr || j >= 4u || j >= st->n || !step_pn_any(st) || st < seq_steps(pr_tr) || st >= seq_steps(pr_tr) + NSTEP || !seq_nd_pn(pr_tr, st))
         return 0;
     d = step_nd_eff(st, j) - step_nd_min(st);
-    return (d * PR_CW + NUDGE_DIV / 2) / (int32_t)NUDGE_DIV;
+    return (d * PR_CW + ND_FINE / 2) / (int32_t)ND_FINE;
 }
 static void pr_bars(const step_t *st, int32_t x, int32_t w, uint16_t c, int acc_all, int32_t *first, uint32_t hits,
                     const step_t *ns, int32_t nx, uint32_t skip, uint32_t shrt)
@@ -236,7 +236,7 @@ static int32_t pr_nudge_x(const track_t *t, const step_t *st, int32_t x, int32_t
     int32_t n = seq_nudge(t, st), d, lo = PR_X0 + 1, hi = PR_X0 + (int32_t)ncol * PR_CW - w;
     if (!n)
         return x;
-    d = (n * PR_CW + (n < 0 ? -(int32_t)NUDGE_DIV / 2 : (int32_t)NUDGE_DIV / 2)) / (int32_t)NUDGE_DIV;
+    d = (n * PR_CW + (n < 0 ? -(int32_t)ND_FINE / 2 : (int32_t)ND_FINE / 2)) / (int32_t)ND_FINE;
     x += d;
     return x < lo ? lo : x > hi ? hi : x;
 }

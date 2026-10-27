@@ -1211,7 +1211,7 @@ static void draw_columns(void)
             int on = sd_takes(st, k);
             const char *u = "";
             if (hk >= 0 && k == EVK_NUDGE)
-                v = step_nd_eff(st, (uint32_t)hk);
+                v = (step_nd_eff(st, (uint32_t)hk) + (step_nd_eff(st, (uint32_t)hk) < 0 ? -(int32_t)ND_SIX / 2 : (int32_t)ND_SIX / 2)) / (int32_t)ND_SIX;   /* (to the nearest 1/16) */
             else if (hk >= 0 && k == EVK_VEL && st->nv[hk])
                 v = st->nv[hk];
             if (k == EVK_CHANCE) {                     /* (1.5.5: a condition, "1:4" "FILL", its card COND) */

@@ -50,28 +50,31 @@ static int basics(void)
     uint32_t k;
     memset(&s, 0, sizeof s);
     for (k = 0; k < 4u; k++)
-        for (v = -8; v <= 7; v++) {
+        for (v = -128; v <= 127; v++) {
             step_set_note_nd(&s, k, v);
             ok &= step_note_nd(&s, k) == v;
             step_set_note_nd(&s, k, 0);
         }
-    CHK("pernote: each note's NUDGE offset -8..+7 round trips in its own nibble", ok);
-    step_set_note_nd(&s, 0, 3); step_set_note_nd(&s, 1, -2); step_set_note_nd(&s, 2, 5); step_set_note_nd(&s, 3, -8);
-    ok = step_note_nd(&s, 0) == 3 && step_note_nd(&s, 1) == -2 && step_note_nd(&s, 2) == 5 && step_note_nd(&s, 3) == -8;
+    step_set_note_nd(&s, 0, 500); ok &= step_note_nd(&s, 0) == 127;
+    step_set_note_nd(&s, 0, -500); ok &= step_note_nd(&s, 0) == -128;
+    step_set_note_nd(&s, 0, 0);
+    CHK("pernote: each note's NUDGE offset -128..+127 (1/128 of the step) round trips in its own byte, out of range kept at the end", ok);
+    step_set_note_nd(&s, 0, 3); step_set_note_nd(&s, 1, -20); step_set_note_nd(&s, 2, 100); step_set_note_nd(&s, 3, -128);
+    ok = step_note_nd(&s, 0) == 3 && step_note_nd(&s, 1) == -20 && step_note_nd(&s, 2) == 100 && step_note_nd(&s, 3) == -128;
     CHK("  four notes do not touch each other", ok);
     s.n = 4; s.note[0] = 60; s.note[1] = 62; s.note[2] = 64; s.note[3] = 65;
     s.nv[0] = 10; s.nv[1] = 20; s.nv[2] = 30; s.nv[3] = 40;
     step_note_del(&s, 1);
     ok = s.note[1] == 64 && s.note[2] == 65 && s.note[3] == 0 && s.nv[0] == 10 && s.nv[1] == 30 && s.nv[2] == 40 && s.nv[3] == 0 &&
-         step_note_nd(&s, 0) == 3 && step_note_nd(&s, 1) == 5 && step_note_nd(&s, 2) == -8 && step_note_nd(&s, 3) == 0;
+         step_note_nd(&s, 0) == 3 && step_note_nd(&s, 1) == 100 && step_note_nd(&s, 2) == -128 && step_note_nd(&s, 3) == 0;
     CHK("  a note out: the ones after it move up with their VEL and NUDGE, the last place is clear", ok);
     step_pn_clear(&s);
     CHK("  step_pn_clear: none left", !step_pn_any(&s));
     memset(&s, 0, sizeof s);
-    s.flags = 0; step_set_nudge(&s, 6); step_set_note_nd(&s, 1, 7);
-    CHK("  the note's NUDGE as it plays is the step's plus its own, kept in -8..+7", step_nd_eff(&s, 1) == 7 && step_nd_eff(&s, 0) == 6);
-    step_set_nudge(&s, -7); step_set_note_nd(&s, 1, -8);
-    CHK("  .. at the other end too", step_nd_eff(&s, 1) == -8);
+    s.flags = 0; step_set_nudge(&s, 6); step_set_note_nd(&s, 1, 60);
+    CHK("  the note's NUDGE as it plays is the step's (x8) plus its own, kept inside half a step", step_nd_eff(&s, 1) == 63 && step_nd_eff(&s, 0) == 48);
+    step_set_nudge(&s, -7); step_set_note_nd(&s, 1, -50);
+    CHK("  .. at the other end too", step_nd_eff(&s, 1) == -64);
     return bad;
 }
 
@@ -98,12 +101,22 @@ static int play_nudge(void)
     int bad = 0, ok;
     track_t *t = loop2();
     uint32_t p = period(t), at[16], nt[16], n, i, d;
-    t->step[0].nd[0] = 0; step_set_note_nd(&t->step[0], 1, 8 > 7 ? 7 : 8);   /* +7 sixteenths */
+    t->step[0].nd[0] = 0; step_set_note_nd(&t->step[0], 1, 56);   /* +7 sixteenths */
     seq_start();
     n = run(t, (2u * p) / CTL - 1u, at, nt, 16);
     d = n >= 2u ? at[1] - at[0] : 0u;
     ok = n == 2u && d + CTL >= 7u * p / 16u && d <= 7u * p / 16u + CTL;
     CHK("pernote play: a note with +7/16 starts 7/16 of a step after the first", ok);
+    {   /* fine: 13/128 of the step (a 1/16 grid could not say it) */
+        track_t *u = loop2();
+        uint32_t m2, a2[8], n2[8], dd;
+        step_set_note_nd(&u->step[0], 1, 13);
+        seq_start();
+        m2 = run(u, (2u * p) / CTL - 1u, a2, n2, 8);
+        dd = m2 >= 2u ? a2[1] - a2[0] : 0u;
+        CHK("pernote play: 13/128 of a step: the second note starts 13/128 of a step after the first (to a block)", m2 == 2u && dd + 2u * CTL >= 13u * p / 128u && dd <= 13u * p / 128u + 2u * CTL && dd > 0u);
+        seq_stop();
+    }
     /* the note ends its GATE after its own start, nothing sticks */
     ok = 1;
     for (i = 0; i < t->lng_p[0] + NLNG; i++) ;
@@ -118,7 +131,7 @@ static int play_nudge(void)
 
     t = loop2();
     t->p[P_SQNT] = 1;                               /* QUANTIZE ON: the nudges are not played */
-    step_set_note_nd(&t->step[0], 1, 7);
+    step_set_note_nd(&t->step[0], 1, 56);
     seq_start();
     n = run(t, (2u * p) / CTL - 1u, at, nt, 16);
     CHK("  QUANTIZE ON: the chord starts together", n == 2u && at[0] == at[1]);
@@ -126,7 +139,7 @@ static int play_nudge(void)
 
     t = loop2();                                    /* the step is early by -4/16, its second note on the beat (+4): the step plays early, the note after */
     step_set_nudge(&t->step[0], -4);
-    step_set_note_nd(&t->step[0], 1, 4);
+    step_set_note_nd(&t->step[0], 1, 32);
     seq_start();
     n = run(t, (4u * p) / CTL - 1u, at, nt, 16);
     ok = n >= 4u && at[1] - at[0] + 3u * CTL >= p / 4u && at[1] - at[0] <= p / 4u + 3u * CTL &&
@@ -135,7 +148,7 @@ static int play_nudge(void)
     seq_stop();
 
     t = loop2();
-    t->step[0].time = ST_NOTE; t->step[0].flags = SF_SLIDE; step_set_note_nd(&t->step[0], 1, 7);
+    t->step[0].time = ST_NOTE; t->step[0].flags = SF_SLIDE; step_set_note_nd(&t->step[0], 1, 56);
     seq_start();
     n = run(t, (2u * p) / CTL - 1u, at, nt, 16);
     CHK("  a SLIDE step plays its notes together (held on)", n == 2u && at[0] == at[1]);
@@ -157,17 +170,22 @@ static int recording(void)
     t->seq_pos = p / 4u;
     rec_note(t, 67, 100);
     ok = t->step[0].n == 3u && step_nudge(&t->step[0]) == 0 && t->step[0].vel == 100u && t->step[0].nv[0] == 0u &&
-         step_note_nd(&t->step[0], 1) == 7 && t->step[0].nv[1] == 70u && step_note_nd(&t->step[0], 2) == 4 && t->step[0].nv[2] == 0u &&
+         step_note_nd(&t->step[0], 1) == 63 && t->step[0].nv[1] == 70u && step_note_nd(&t->step[0], 2) == 32 && t->step[0].nv[2] == 0u &&
          !(t->step[0].flags & SF_ACCENT);
     CHK("rec: the first note sets the step's NUDGE and VEL, later ones keep their own (equal VEL: none of its own)", ok);
     t->seq_pos = 0;
     rec_note(t, 64, 70);
-    CHK("  a note already there is not changed", step_note_nd(&t->step[0], 1) == 7 && t->step[0].n == 3u);
+    CHK("  a note already there is not changed", step_note_nd(&t->step[0], 1) == 63 && t->step[0].n == 3u);
+    memset(&t->step[1], 0, sizeof t->step[1]); t->step[1].time = ST_REST;
+    t->seq_idx = 1; t->seq_pos = p * 13u / 128u;     /* 13/128 of the step: the step 2/16 (rounded), the note its remainder */
+    rec_note(t, 72, 100);
+    CHK("  the first note of a step too: the step's coarse 1/16 and the note's remainder to 1/128 (13/128: step 2 = 16, note -3)",
+        step_nudge(&t->step[1]) == 2 && step_note_nd(&t->step[1], 0) == -3 && step_nd_eff(&t->step[1], 0) == 13);
     song.rec = 0; song.playing = 0;
     /* a step started over has none left */
     memset(&t->step[1], 0, sizeof t->step[1]); t->step[1].time = ST_REST;
     t->step[1] = (step_t){{50, 52}, 2, ST_NOTE, 0, 90};
-    t->step[1].nv[0] = 11; step_set_note_nd(&t->step[1], 1, 3);
+    t->step[1].nv[0] = 11; step_set_note_nd(&t->step[1], 1, 24);
     song.rec = 1; song.playing = 1;
     t->seq_idx = 1; t->seq_pos = 0;
     t->step[1].time = ST_REST; t->step[1].n = 0;
@@ -185,23 +203,23 @@ static int disk(void)
     project_store_t raw;
     proj5_store_t b5, b4;
     uint32_t i, k, tk, sum;
-    t->step[0].nv[1] = 33; step_set_note_nd(&t->step[0], 1, -5);
+    t->step[0].nv[1] = 33; step_set_note_nd(&t->step[0], 1, -37);
     trk[4].step[3] = (step_t){{60, 64, 67, 71}, 4, ST_NOTE, 0, 100};
-    trk[4].step[3].nv[0] = 1; trk[4].step[3].nv[3] = 127; step_set_note_nd(&trk[4].step[3], 2, 7); step_set_note_nd(&trk[4].step[3], 3, -8);
+    trk[4].step[3].nv[0] = 1; trk[4].step[3].nv[3] = 127; step_set_note_nd(&trk[4].step[3], 2, 127); step_set_note_nd(&trk[4].step[3], 3, -128);
     trk[2].step[63] = (step_t){{50, 55}, 2, ST_NOTE, 0, 100};
-    trk[2].step[63].nv[1] = 9; step_set_note_nd(&trk[2].step[63], 0, 2);
+    trk[2].step[63].nv[1] = 9; step_set_note_nd(&trk[2].step[63], 0, 13);
     project_capture(&proj_scratch);
     ok = proj_pack_pair(&raw, &b5, &proj_scratch);
     memset(&proj_scratch, 0, sizeof proj_scratch);
     ok &= proj_import5(&proj_scratch, &raw, (int)sizeof raw, &b5);
     {
         const step_t *a = &proj_scratch.t[0].step[0], *b = &proj_scratch.t[4].step[3], *c = &proj_scratch.t[2].step[63];
-        ok &= a->nv[1] == 33 && step_note_nd(a, 1) == -5 && !a->nv[0] && b->nv[0] == 1 && b->nv[3] == 127 && step_note_nd(b, 2) == 7 &&
-              step_note_nd(b, 3) == -8 && c->nv[1] == 9 && step_note_nd(c, 0) == 2;
+        ok &= a->nv[1] == 33 && step_note_nd(a, 1) == -37 && !a->nv[0] && b->nv[0] == 1 && b->nv[3] == 127 && step_note_nd(b, 2) == 127 &&
+              step_note_nd(b, 3) == -128 && c->nv[1] == 9 && step_note_nd(c, 0) == 13;
     }
     CHK("pernote disk: tracks 1, 3 and 5 keep every note's VEL and NUDGE through FUN10 + PROJ5", ok);
     /* data of a place with no note is dropped on load */
-    b5.raw[PROJ5_V4 - 4u + (0u * 64u + 5u) * 6u + 2u] = 99;          /* track 1 step 6 (empty) nv[2] */
+    b5.raw[PROJ5_V4 - 4u + (0u * 64u + 5u) * 8u + 2u] = 99;          /* track 1 step 6 (empty) nv[2] */
     sum = proj_hash(b5.raw, PROJ5_SIZE - 4u); memcpy(b5.raw + PROJ5_SIZE - 4u, &sum, 4);
     memset(&proj_scratch, 0, sizeof proj_scratch);
     ok = proj_import5(&proj_scratch, &raw, (int)sizeof raw, &b5) && !step_pn_any(&proj_scratch.t[0].step[5]);
@@ -218,6 +236,16 @@ static int disk(void)
             ok &= !step_pn_any(&proj_scratch.t[tk].step[i]);
     ok &= PROJ5_LEN_OK(PROJ5_V4) && PROJ5_LEN_OK(PROJ5_OLD) && PROJ5_LEN_OK(PROJ5_SIZE) && !PROJ5_LEN_OK(1000u);
     CHK("  the block of 1.1.4 (1480 bytes) loads, with no VEL / NUDGE of their own", ok);
+    /* the block of 1.1.5 / 1.1.6 (3400 bytes, a nibble of 1/16 a note): opens, the NUDGE in 1/128 */
+    memset(&b4, 0, sizeof b4);
+    memcpy(b4.raw, b5.raw, PROJ5_V4 - 4u);
+    k = PROJ5_V5; memcpy(b4.raw + 4, &k, 4);
+    b4.raw[PROJ5_V4 - 4u + 1u] = 33;                                  /* step 1 of track 1: note 2's VEL */
+    b4.raw[PROJ5_V4 - 4u + 4u] = (uint8_t)(11u << 4);                 /* .. and its NUDGE nibble: -5 sixteenths (note 2: the high nibble of the first byte) */
+    sum = proj_hash(b4.raw, PROJ5_V5 - 4u); memcpy(b4.raw + PROJ5_V5 - 4u, &sum, 4);
+    memset(&proj_scratch, 0, sizeof proj_scratch);
+    ok = proj_import5(&proj_scratch, &raw, (int)sizeof raw, &b4) && proj_scratch.t[0].step[0].nv[1] == 33 && step_note_nd(&proj_scratch.t[0].step[0], 1) == -40;
+    CHK("  and the block of 1.1.5 / 1.1.6 (3400): a nibble of -5 sixteenths comes as -40 in 1/128", ok && PROJ5_LEN_OK(PROJ5_V5));
     return bad;
 }
 
@@ -242,9 +270,9 @@ static int detail_knobs(void)
     CHK("  back to the step's: none of its own", st->nv[1] == 0u);
     step_set_nudge(st, 2);
     sd_turn_note(1, EVK_NUDGE, 3);
-    CHK("  NUDGE +3 from the step's 2: the note plays at 5, an offset of 3", step_nd_eff(st, 1) == 5 && step_note_nd(st, 1) == 3 && step_nudge(st) == 2);
+    CHK("  NUDGE +3 from the step's 2: the note plays at 5, an offset of 3", step_nd_eff(st, 1) == 40 && step_note_nd(st, 1) == 24 && step_nudge(st) == 2);
     sd_turn_note(1, EVK_NUDGE, 20);
-    CHK("  and stops at +7", step_nd_eff(st, 1) == 7);
+    CHK("  and stops at +7", step_nd_eff(st, 1) == 56);
     kb_chn[k] = 0;
     st->n = 1;
     kb_chn[k] = 1;
@@ -260,17 +288,17 @@ static int roll(void)
     step_t *st = &t->step[0];
     pr_tr = t; pr_cols = 16;
     CHK("pernote roll: no per-note NUDGE: the bars are not moved", pr_note_dx(st, 0) == 0 && pr_note_dx(st, 1) == 0);
-    step_set_note_nd(st, 1, 8 > 7 ? 7 : 8);
+    step_set_note_nd(st, 1, 56);
     CHK("  a note +7/16: its bar 5 px right of the first one (the step's, where its earliest note plays)", pr_note_dx(st, 0) == 0 && pr_note_dx(st, 1) == 5);
     step_set_nudge(st, -8);
-    step_set_note_nd(st, 1, 7);
+    step_set_note_nd(st, 1, 56);
     CHK("  the step -8, a note +7 (it plays at -1): 5 px right of the first", pr_note_dx(st, 0) == 0 && pr_note_dx(st, 1) == 5);
-    CHK("  and the step is drawn at its earliest note (seq_nudge -8)", seq_nudge(t, st) == -8);
+    CHK("  and the step is drawn at its earliest note (seq_nudge -8)", seq_nudge(t, st) == -64);
     t->p[P_SQNT] = 1;
     CHK("  QUANTIZE ON: none moved", pr_note_dx(st, 1) == 0);
     t->p[P_SQNT] = 0;
     st->flags |= SF_SLIDE;
-    CHK("  a SLIDE step: none moved (its notes play together)", pr_note_dx(st, 1) == 0 && seq_nudge(t, st) == -8);
+    CHK("  a SLIDE step: none moved (its notes play together)", pr_note_dx(st, 1) == 0 && seq_nudge(t, st) == -64);
     st->flags &= ~SF_SLIDE;
     ui.cursor = 0; ui.bank = 0;
     graph_roll(t, T_TEXT);                           /* (drawn without trouble) */

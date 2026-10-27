@@ -851,8 +851,10 @@ static void sd_turn_note(uint32_t hk, uint32_t k, int32_t d)
         st->nv[hk] = (uint8_t)(v == sv ? 0 : v);
         ui_message("NOTE VEL");
     } else {
-        int32_t v = clamp(step_nd_eff(st, hk) + d, -8, 7);
-        step_set_note_nd(st, hk, v - step_nudge(st));
+        int32_t e = step_nd_eff(st, hk), v;
+        e = (e + (e < 0 ? -(int32_t)ND_SIX / 2 : (int32_t)ND_SIX / 2)) / (int32_t)ND_SIX;   /* (1.1.7: a turn lands on a 1/16, whatever fine value it left) */
+        v = clamp(e + d, -8, 7);
+        step_set_note_nd(st, hk, v * (int32_t)ND_SIX - step_nudge(st) * (int32_t)ND_SIX);
         if (t->p[P_SQNT])
             ui_message("QUANTIZE IS ON");
     }
