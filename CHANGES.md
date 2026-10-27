@@ -1,11 +1,16 @@
 # 5-LAB: changes from Felucca 1.6.1
 
 5-LAB is a fork of [Felucca](https://github.com/hugelton/Felucca) 1.6.1 by Leo Kuroshita (Hügelton Instruments), GPL-3.0-only like the
-original. **Version 1.1.5** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
+original. **Version 1.1.6** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
 Five audio tracks, every engine on all five; the lab is for trying things out.
 
 Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything not listed here is Felucca 1.6.1 as it was
 (the sound is the same: the 98 golden renders of `tests/golden.txt` are unchanged).
+
+## 1.1.6: a note's own NUDGE on the piano roll
+
+- **Piano roll.** With QUANTIZE OFF the bars of a chord with per-note NUDGE are drawn where each note plays: the step's bars are at its earliest note, the others moved by the difference
+  (up to 5 px; the same scale as a step's NUDGE), also on LONG notes. A step that slides or is held into by a TIE draws them together, as it plays them.
 
 ## 1.1.5: a note's own VEL and NUDGE
 
@@ -21,7 +26,7 @@ Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything n
   four notes, after the 1.1.4 content and under the same hash), inside the same FUN11 object. Projects of 1.1.4 (1480 bytes) and 1.1.0 .. 1.1.3 (1280) **open** with no per-note values; a project
   saved now does **not open in 1.1.4 or before**. The editor's backup takes all three sizes. An editor that writes a step (STEP_SET) clears that step's per-note values.
 - **Memory.** About 5 KB more RAM and 17 KB more pool (the steps kept, the block copies); the numbers are checked by `build.py` (RAM 4096, pool 8192), not measured on the host.
-- Not yet: a note's own CHANCE and RATCH, and showing a note's own NUDGE on the piano roll.
+- Not yet: a note's own CHANCE and RATCH (the roll shows the NUDGE since 1.1.6).
 
 ## 1.1.4: every note, 2 to 64 steps
 

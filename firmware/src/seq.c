@@ -1613,14 +1613,19 @@ static __attribute__((noinline)) void seq_ratchet(track_t *t, uint32_t period)
 
 /* the nudge of step s in 1/NUDGE_DIV of the step (NUDGE, core.h) when it plays off its start: the track's QUANTIZE OFF,
  * a NOTE step that plays something, x1 (a ratcheted step's parts divide the step: on its start); else 0 */
-static int32_t seq_nudge(const track_t *t, const step_t *s)
+/* 1.1.5: the notes' own NUDGE applies to step s (the piano roll draws it too): QUANTIZE OFF, a NOTE step, x1, not held on (a slide, a TIE after) */
+static int seq_nd_pn(const track_t *t, const step_t *s)
 {
     uint32_t len = t->p[P_SLEN] ? (uint32_t)t->p[P_SLEN] : 1u, idx = (uint32_t)(s - seq_steps(t));
+    if (t->p[P_SQNT] || s->time != ST_NOTE || !s->n || step_ratchet(s) != 1u || idx >= NSTEP)
+        return 0;
+    return !(s->flags & SF_SLIDE) && seq_steps(t)[(idx + 1u) % len].time != ST_TIE;
+}
+static int32_t seq_nudge(const track_t *t, const step_t *s)
+{
     if (t->p[P_SQNT] || s->time != ST_NOTE || (!s->n && !s->hit) || step_ratchet(s) != 1u)
         return 0;
-    if ((s->flags & SF_SLIDE) || seq_steps(t)[(idx + 1u) % len].time == ST_TIE)
-        return step_nudge(s);                       /* (1.1.5: held on: its notes play together, seq_step) */
-    return step_nd_min(s);
+    return seq_nd_pn(t, s) ? step_nd_min(s) : step_nudge(s);   /* (1.1.5: held on: the notes play together) */
 }
 
 /* 1.5.6 (#213): the matrix's TIME on step idx: how late it plays (samples, 0: on time). A NOTE step that plays

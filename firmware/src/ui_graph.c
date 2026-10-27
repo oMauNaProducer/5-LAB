@@ -185,31 +185,47 @@ static int32_t pr_bar_w(const step_t *ns, int32_t nx, int32_t n, int32_t x, int3
         }
     return w;
 }
+/* 1.1.5: a note's own NUDGE on the roll: its bar is moved from the step's (which is where the earliest note plays) by the difference, in 1/16 of the column
+ * (pr_tr: the track drawn, pr_cols: its columns on the page) */
+static const track_t *pr_tr;
+static uint32_t pr_cols = 16;
+static int32_t pr_note_dx(const step_t *st, uint32_t j)
+{
+    int32_t d;
+    if (!pr_tr || j >= 4u || j >= st->n || !step_pn_any(st) || st < seq_steps(pr_tr) || st >= seq_steps(pr_tr) + NSTEP || !seq_nd_pn(pr_tr, st))
+        return 0;
+    d = step_nd_eff(st, j) - step_nd_min(st);
+    return (d * PR_CW + NUDGE_DIV / 2) / (int32_t)NUDGE_DIV;
+}
 static void pr_bars(const step_t *st, int32_t x, int32_t w, uint16_t c, int acc_all, int32_t *first, uint32_t hits,
                     const step_t *ns, int32_t nx, uint32_t skip, uint32_t shrt)
 {
     uint32_t j;
     int32_t ybot = PR_Y0 + PR_ROWS * PR_RH;
     for (j = 0; j < 4u + NLANE; j++) {
-        int32_t n = pr_note(st, j), y, bw;
+        int32_t n = pr_note(st, j), y, bw, bx = x, hi;
         int acc;
         if (n < 0 || (j < 4u && ((skip >> j) & 1u)))   /* 1.1.0: a note that ended before this TIE: no bar */
             continue;
         bw = j < 4u && ((shrt >> j) & 1u) ? 9 : w;      /* (one that ends with this step: its own width, not the TIEs') */
-        if (hits == 1u)
-            bw = pr_bar_w(ns, nx, n, x, bw);
+        if (hits == 1u) {
+            bx = x + pr_note_dx(st, j);              /* (1.1.5: the note's own NUDGE) */
+            hi = PR_X0 + (int32_t)pr_cols * PR_CW - bw;
+            bx = bx > hi ? (hi > x ? hi : x) : bx;
+            bw = pr_bar_w(ns, nx, n, bx, bw);
+        }
         acc = acc_all || (j >= 4u && ((st->acc >> (j - 4u)) & 1u));
         y = pr_row_y(n);
         if (*first < -1000)
             *first = y;
         if (y < PR_Y0)
-            pr_split(x, PR_Y0, bw, 1, c, hits);
+            pr_split(bx, PR_Y0, bw, 1, c, hits);
         else if (y >= ybot)
-            pr_split(x, ybot - 1, bw, 1, c, hits);
+            pr_split(bx, ybot - 1, bw, 1, c, hits);
         else if (acc)
-            pr_split(x, y, bw, PR_RH, c == T_ACCENT ? c : T_TEXT, hits);
+            pr_split(bx, y, bw, PR_RH, c == T_ACCENT ? c : T_TEXT, hits);
         else
-            pr_split(x, y + 1, bw, PR_RH - 2, c, hits);
+            pr_split(bx, y + 1, bw, PR_RH - 2, c, hits);
     }
 }
 /* 5-LAB 1.0.6: the bar of a step that plays off its start (QUANTIZE OFF, a NUDGE: seq_nudge) is drawn where it plays: x moved by
@@ -244,7 +260,7 @@ static void pr_longs(const track_t *t, uint32_t base, uint32_t ncol, uint16_t c)
             b = last < base + ncol - 1u ? last : base + ncol - 1u;   /* the last column of this page it covers */
             x0 = s0 >= base ? PR_X0 + (int32_t)(s0 - base) * PR_CW + 2 : PR_X0 + 1;
             if (s0 >= base && step_ratchet(st) == 1u)
-                x0 = pr_nudge_x(t, st, x0, 9, ncol);
+                x0 = pr_nudge_x(t, st, x0, 9, ncol) + pr_note_dx(st, k);   /* (1.1.5: and the note's own) */
             x1 = PR_X0 + (int32_t)(b - base) * PR_CW + (last > b ? PR_CW - 1 : 10);
             memset(&tmp, 0, sizeof tmp);
             tmp.note[0] = st->note[k];
@@ -262,6 +278,7 @@ static void graph_roll(const track_t *t, uint16_t c)
     char nb[8];
     ncol = base < len ? (len - base < 16u ? len - base : 16u) : 0u;
     gw = (int32_t)ncol * PR_CW + 1;
+    pr_tr = t; pr_cols = ncol;
     for (r = 0; r < PR_ROWS; r++) {                 /* rows: the lane, the key, the C names */
         int32_t n = (int32_t)proll.lo + PR_ROWS - 1 - r, y = PR_Y0 + r * PR_RH;
         uint32_t pc = (uint32_t)n % 12u;
@@ -340,6 +357,7 @@ static void graph_roll(const track_t *t, uint16_t c)
         }
     }
     pr_longs(t, base, ncol, c);
+    pr_tr = 0;
 }
 /* SEQ > STEP on a DRUM track: the grid, 8 lanes x the 16 steps of the page shown. Lanes by their two-letter
  * names (BD SD CP CH OH TM RS CB; CG CL CY on the other kits). A hit is a rounded square (accented: the

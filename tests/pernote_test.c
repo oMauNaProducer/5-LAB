@@ -253,6 +253,31 @@ static int detail_knobs(void)
     return bad;
 }
 
+static int roll(void)
+{
+    int bad = 0;
+    track_t *t = loop2();
+    step_t *st = &t->step[0];
+    pr_tr = t; pr_cols = 16;
+    CHK("pernote roll: no per-note NUDGE: the bars are not moved", pr_note_dx(st, 0) == 0 && pr_note_dx(st, 1) == 0);
+    step_set_note_nd(st, 1, 8 > 7 ? 7 : 8);
+    CHK("  a note +7/16: its bar 5 px right of the first one (the step's, where its earliest note plays)", pr_note_dx(st, 0) == 0 && pr_note_dx(st, 1) == 5);
+    step_set_nudge(st, -8);
+    step_set_note_nd(st, 1, 7);
+    CHK("  the step -8, a note +7 (it plays at -1): 5 px right of the first", pr_note_dx(st, 0) == 0 && pr_note_dx(st, 1) == 5);
+    CHK("  and the step is drawn at its earliest note (seq_nudge -8)", seq_nudge(t, st) == -8);
+    t->p[P_SQNT] = 1;
+    CHK("  QUANTIZE ON: none moved", pr_note_dx(st, 1) == 0);
+    t->p[P_SQNT] = 0;
+    st->flags |= SF_SLIDE;
+    CHK("  a SLIDE step: none moved (its notes play together)", pr_note_dx(st, 1) == 0 && seq_nudge(t, st) == -8);
+    st->flags &= ~SF_SLIDE;
+    ui.cursor = 0; ui.bank = 0;
+    graph_roll(t, T_TEXT);                           /* (drawn without trouble) */
+    CHK("  the roll draws", pr_tr == 0);
+    return bad;
+}
+
 int main(void)
 {
     int bad = 0;
@@ -262,6 +287,7 @@ int main(void)
     bad += recording();
     bad += disk();
     bad += detail_knobs();
+    bad += roll();
     puts(bad ? "pernote tests FAILED" : "pernote tests passed");
     return bad != 0;
 }
