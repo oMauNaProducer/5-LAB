@@ -1,11 +1,22 @@
 # 5-LAB: changes from Felucca 1.6.1
 
 5-LAB is a fork of [Felucca](https://github.com/hugelton/Felucca) 1.6.1 by Leo Kuroshita (Hügelton Instruments), GPL-3.0-only like the
-original. **Version 1.1.7** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
+original. **Version 1.1.8** (the first versions, 0.6 to 0.9.8, were called LAB-4T) is the fork's own numbering, so it is never mistaken for an official Felucca release.
 Five audio tracks, every engine on all five; the lab is for trying things out.
 
 Not affiliated with or endorsed by Hügelton Instruments or M-VAVE. Everything not listed here is Felucca 1.6.1 as it was
 (the sound is the same: the 98 golden renders of `tests/golden.txt` are unchanged).
+
+## 1.1.8: step extras, a new flash object (FXT1)
+
+- **A second, small object per project slot** (one 4 KB sector a copy, A/B) for data that belongs to a step or a note and does not fit the project object. It is a list of tagged records
+  (type, step, bytes); a version that does not know a type skips it, so a later tool adds a type, not a layout. Nothing existing moves or is migrated.
+- **Per-note VEL and NUDGE are now saved there too** (type 1, 8 bytes a step that has any: at most 3.5 KB for all 320 steps). The PROJ5 block **still holds the same values**: on opening, the extras
+  are used if they belong to the project, otherwise the PROJ5 block's. Later (when this is proven on the unit) the block's copy can go.
+- **Safety.** The extras sit in the slot's old FUN10 sectors (0x97000 + slot x 8 KB) and are written only once the slot has a FUN11 (a Felucca / 1.0.0 project there is never erased by them).
+  A save writes the extras first (never over the copy that goes with the project now saved), then the project; each says which project it is by a link (the hash that ends the fifth-track block), so
+  a power cut anywhere leaves the old project with its old extras or the new with the new. The autosave does not use them.
+- Saved files of 1.1.8 open in 1.1.7 (the PROJ5 block is unchanged). Tests: `tests/persistence_test.c` (a cut at 60 points of a save, the old sectors kept, a wrong link ignored).
 
 ## 1.1.7: fine onsets (1/128 of a step)
 

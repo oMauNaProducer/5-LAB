@@ -35,7 +35,12 @@ enum { OBJ_SETTINGS, OBJ_PROJECT0, OBJ_UPRESET0 = OBJ_PROJECT0 + 4, OBJ_FM6BANK 
        OBJ_AUTOSAVE,
        OBJ_RETIRED5_0,                               /* 5-LAB 1.0.0's fifth-track objects (10..14): never written again, and
                                                       * their numbers never reused (a stale record there is no object's) */
-       OBJ_PROJ11_0 = OBJ_RETIRED5_0 + 5, OBJ_AUTOSAVE11 = OBJ_PROJ11_0 + 4, OBJ_COUNT };
+       OBJ_PROJ11_0 = OBJ_RETIRED5_0 + 5, OBJ_AUTOSAVE11 = OBJ_PROJ11_0 + 4, OBJ_COUNT,
+       OBJ_XTRA0 = OBJ_COUNT, OBJ_XTRA_END = OBJ_XTRA0 + 4 };
+/* 5-LAB 1.2.0, "FXT1": a slot's step extras (per-step / per-note data that does not fit the FUN11 object): ONE sector a copy, A/B, in the
+ * slot's own FUN10 sectors of before 0x97000 + slot * 8 KB (the same place as OBJ_PROJECT0 + slot: only ever written once the slot has a
+ * FUN11, and only read when a FUN11 of the same project says so by its link, so a Felucca / 1.0.0 project in those sectors is never
+ * touched). Its payload belongs to project.c (a link word at byte 8 says which FUN11 it goes with: st_xtra_*). */
 /* 5-LAB 1.0.1, "FUN11": a project is ONE object of two sectors a copy (st_big): the FUN10 record (tracks 1..4, the format
  * every Felucca reads) then the fifth track's block (project.c PROJ5), committed together. The four slots and the autosave
  * are OBJ_PROJ11_0.. at 0xC8000..0xDBFFF (the old third user sample slot); OBJ_PROJECT0.. and OBJ_AUTOSAVE (FUN10 alone,
@@ -79,6 +84,8 @@ static uint32_t st_sector(uint32_t obj, uint32_t copy)  /* flash offset of copy 
         return copy ? 0xFE000u : 0x9F000u;
     if (obj == OBJ_AUTOSAVE)
         return 0xE5000u + copy * ST_SECTOR;
+    if (obj >= OBJ_XTRA0)                                /* (the slot's FUN10 sectors, as OBJ_PROJECT0 + n) */
+        return 0x97000u + (obj - OBJ_XTRA0) * 2u * ST_SECTOR + copy * ST_SECTOR;
     if (obj >= OBJ_PROJ11_0)                             /* (5-LAB: USR3's flash, 0xC8000..0xDBFFF: 5 objects, A/B, two sectors a copy) */
         return 0xC8000u + (obj - OBJ_PROJ11_0) * 4u * ST_SECTOR + copy * 2u * ST_SECTOR;
     if (obj >= OBJ_UPRESET0)
@@ -89,7 +96,7 @@ static uint32_t st_sector(uint32_t obj, uint32_t copy)  /* flash offset of copy 
 static uint8_t st_buf[ST_PAYLOAD_MAX] __attribute__((aligned(4), section(".pool")));   /* (main loop only) */
 
 static int st_big(uint32_t obj) { return obj >= OBJ_PROJ11_0 && obj < OBJ_COUNT; }   /* two sectors a copy */
-static int st_live(uint32_t obj) { return obj < OBJ_COUNT && (obj < OBJ_RETIRED5_0 || obj >= OBJ_PROJ11_0); }
+static int st_live(uint32_t obj) { return (obj < OBJ_COUNT && (obj < OBJ_RETIRED5_0 || obj >= OBJ_PROJ11_0)) || (obj >= OBJ_XTRA0 && obj < OBJ_XTRA_END); }
 
 static int st_head(uint32_t obj, uint32_t copy, st_hdr_t *h)   /* commit record valid: 0 */
 {
@@ -265,6 +272,94 @@ static int st_save_parts(uint32_t obj, const void *a, uint32_t alen, const void 
         st_hdr_t chk;
         uint32_t c = (uint32_t)to;
         if (st_head(obj, c, &chk) || memcmp(&chk, &h, sizeof h) || st_body(obj, c, &chk))
+            return -7;
+    }
+    return 0;
+}
+/* ---- 1.2.0 step extras (OBJ_XTRA0 + slot): the payload's word at byte 8 is the link to the FUN11 it belongs to ---- */
+#define XT_LINK_AT 8u
+/* has FUN11 object `obj11` a valid copy (even an empty record)? Then its slot's legacy FUN10 sectors are no longer read */
+static int st_has(uint32_t obj11) { st_hdr_t h; return st_live(obj11) && st_big(obj11) && st_current(obj11, &h) >= 0; }
+/* the last word of FUN11 object obj11's record (the fifth track's block ends with its own hash: the link the extras are written for) */
+static int st_tail(uint32_t obj11, uint32_t *w)
+{
+    st_hdr_t h;
+    int cur;
+    if (!st_live(obj11) || !st_big(obj11) || (cur = st_current(obj11, &h)) < 0 || h.len < 4u)
+        return 0;
+    return st_pay_read(obj11, (uint32_t)cur, h.len - 4u, w, 4u) == 0;
+}
+/* does copy c of the extras object hold a valid record of the link `link`? 1 yes (its payload is in st_buf) */
+static int st_xtra_copy(uint32_t obj, uint32_t c, uint32_t link, st_hdr_t *h)
+{
+    uint32_t w;
+    if (st_head(obj, c, h) || h->len < XT_LINK_AT + 4u || st_body(obj, c, h))
+        return 0;
+    memcpy(&w, st_buf + XT_LINK_AT, 4);
+    return w == link;
+}
+/* the extras of `link` -> dst (max bytes): the record's length, 0 none of that link */
+static int st_xtra_load(uint32_t obj, uint32_t link, void *dst, uint32_t max)
+{
+    st_hdr_t a, b;
+    int ha = 0, hb = 0;
+    if (obj < OBJ_XTRA0 || obj >= OBJ_XTRA_END)
+        return 0;
+    ha = st_head(obj, 0, &a) == 0;
+    hb = st_head(obj, 1, &b) == 0;
+    if (hb && (!ha || (b.seq != a.seq && b.seq - a.seq < 0x80000000u)) && b.len <= max && st_xtra_copy(obj, 1, link, &b)) {
+        memcpy(dst, st_buf, b.len);
+        return (int)b.len;
+    }
+    if (ha && a.len <= max && st_xtra_copy(obj, 0, link, &a)) {
+        memcpy(dst, st_buf, a.len);
+        return (int)a.len;
+    }
+    if (hb && b.len <= max && st_xtra_copy(obj, 1, link, &b)) {
+        memcpy(dst, st_buf, b.len);
+        return (int)b.len;
+    }
+    return 0;
+}
+/* a new record of the extras: fill(st_buf, ctx) writes it (the length back, 0 refuses) after the copy to write is chosen: never
+ * the one that belongs to `live` (the FUN11 that is current now), so a cut before that FUN11 is replaced keeps its extras */
+static int st_xtra_save(uint32_t obj, uint32_t live, uint32_t (*fill)(uint8_t *buf, void *ctx), void *ctx)
+{
+    st_hdr_t h, t;
+    uint32_t seq, base, off, len, crc = 0xFFFFFFFFu;
+    int cur, to, rc, m0, m1;
+    if (obj < OBJ_XTRA0 || obj >= OBJ_XTRA_END)
+        return -1;
+    cur = st_current(obj, &h);
+    seq = cur < 0 ? 0u : h.seq;
+    m0 = st_xtra_copy(obj, 0, live, &t);
+    m1 = st_xtra_copy(obj, 1, live, &t);
+    to = m0 && !m1 ? 1 : m1 && !m0 ? 0 : cur == 0 ? 1 : 0;
+    len = fill(st_buf, ctx);
+    if (len == 0u || len > ST_PAYLOAD_MAX)
+        return -1;
+    base = st_sector(obj, (uint32_t)to);
+    if ((rc = st_erase(base)) != 0)
+        return rc;
+    for (off = 0; off < len; off += 256u) {
+        uint32_t n = len - off > 256u ? 256u : len - off;
+        if ((rc = st_prog(base + ST_PAYLOAD_OFF + off, st_buf + off, n)) != 0)
+            return rc;
+    }
+    crc = st_crc32_add(crc, st_buf, len);
+    h.magic = ST_MAGIC;
+    h.type = (uint16_t)obj;
+    h.slot = (uint16_t)to;
+    h.seq = seq + 1u;
+    h.len = len;
+    h.crc = ~crc;
+    h.rsv[0] = h.rsv[1] = 0xFFFFFFFFu;
+    h.hcrc = st_crc32(&h, sizeof h - 4u);
+    if ((rc = st_prog(base, &h, sizeof h)) != 0)
+        return rc;
+    {
+        st_hdr_t chk;
+        if (st_head(obj, (uint32_t)to, &chk) || memcmp(&chk, &h, sizeof h) || st_body(obj, (uint32_t)to, &chk))
             return -7;
     }
     return 0;

@@ -1096,12 +1096,81 @@ static void proj_bound(project_t *q)
 }
 
 #if FELUCCA_FLASH
+/* 5-LAB 1.2.0, "FXT1": a slot's step extras, one sector a copy (storage.c OBJ_XTRA0 + slot). Payload: 16-byte header (magic, version u16 +
+ * record count u16, the LINK = the last word of the FUN11's fifth-track block, a byte count u16 + 2 reserved), then tagged records, each
+ * (type << 4 | length 0..15, key lo, key hi, length bytes). Key = track * 64 + step. A type this version does not know is skipped, so a
+ * later tool adds a type, not a layout. Type 1, XT_PN: the step's notes' own VEL (4) and NUDGE (4), as the PROJ5 block holds them.
+ * Written BEFORE the FUN11 of the same save (the copy that goes with the FUN11 now current is never overwritten) and read only if
+ * the FUN11 says so by its link: otherwise the project opens without them (1.2.0: from the PROJ5 block, which still holds the same) */
+#define XT_MAGIC 0x31545846u                   /* "FXT1" */
+#define XT_HDR 16u
+#define XT_PN 1u
+static uint32_t proj_wire5_len;                /* the length of the block proj_flash_pair_load found (0 none) */
+static uint32_t xt_fill(uint8_t *buf, void *ctx)
+{
+    const uint8_t *b5 = ctx;
+    uint32_t i, pos = XT_HDR, n = 0, magic = XT_MAGIC, link, ver = 1u;
+    memset(buf, 0, XT_HDR);
+    for (i = 0; i < 5u * NSTEP; i++) {
+        const uint8_t *pn = b5 + PROJ5_V4 - 4u + i * 8u;
+        uint32_t z;
+        for (z = 0; z < 8u && !pn[z]; z++) ;
+        if (z == 8u) continue;
+        if (pos + 3u + 8u > ST_PAYLOAD_MAX) return 0;          /* (cannot happen: 320 * 11 + 16 fits) */
+        buf[pos] = (uint8_t)(XT_PN << 4 | 8u); buf[pos + 1u] = (uint8_t)i; buf[pos + 2u] = (uint8_t)(i >> 8);
+        memcpy(buf + pos + 3u, pn, 8u);
+        pos += 11u; n++;
+    }
+    memcpy(&link, b5 + PROJ5_SIZE - 4u, 4);
+    memcpy(buf, &magic, 4); buf[4] = (uint8_t)ver; buf[6] = (uint8_t)n; buf[7] = (uint8_t)(n >> 8);
+    memcpy(buf + 8, &link, 4);
+    buf[12] = (uint8_t)(pos - XT_HDR); buf[13] = (uint8_t)((pos - XT_HDR) >> 8);
+    return pos;
+}
+/* the extras b (len bytes) onto q's steps: 1 applied (the notes' own VEL / NUDGE are exactly what it says), 0 refused whole (q as it was) */
+static int xt_apply(project_t *q, const uint8_t *b, uint32_t len)
+{
+    uint32_t magic, cnt, body, pos, i, r, k;
+    if (len < XT_HDR) return 0;
+    memcpy(&magic, b, 4);
+    cnt = b[6] | (uint32_t)b[7] << 8; body = b[12] | (uint32_t)b[13] << 8;
+    if (magic != XT_MAGIC || b[4] != 1u || XT_HDR + body > len) return 0;
+    for (r = 0, pos = XT_HDR; r < cnt; r++) {                       /* pass 1: the records are whole */
+        if (pos + 3u > XT_HDR + body) return 0;
+        pos += 3u + (b[pos] & 15u);
+        if (pos > XT_HDR + body) return 0;
+    }
+    if (pos != XT_HDR + body) return 0;
+    for (i = 0; i < 5u * NSTEP; i++) step_pn_clear(&q->t[i / NSTEP].step[i % NSTEP]);
+    for (r = 0, pos = XT_HDR; r < cnt; r++) {
+        uint32_t ty = b[pos] >> 4, rl = b[pos] & 15u, key = b[pos + 1u] | (uint32_t)b[pos + 2u] << 8;
+        if (ty == XT_PN && rl == 8u && key < 5u * NSTEP) {
+            step_t *st = &q->t[key / NSTEP].step[key % NSTEP];
+            memcpy(st->nv, b + pos + 3u, 4); memcpy(st->nd, b + pos + 7u, 4);
+            for (k = 0; k < 4u; k++)
+                if (k >= st->n || st->time != ST_NOTE) step_pn_new(st, k); else st->nv[k] &= 127u;
+        }
+        pos += 3u + rl;
+    }
+    return 1;
+}
+#endif
+
+#if FELUCCA_FLASH
 /* 5-LAB 1.0.1, FUN11: proj_wire (the FUN10 record) and proj_wire5 (the fifth track's block) -> slot's ONE flash object
  * (storage.c OBJ_PROJ11_0 + slot: two sectors a copy, committed together, so a project and its fifth track are never of two
  * saves). 0 saved */
 static int proj_flash_pair(uint32_t slot)
 {
-    return st_save2(OBJ_PROJ11_0 + (slot & 3u), &proj_wire, sizeof proj_wire, &proj_wire5, sizeof proj_wire5) ? 1 : 0;
+    uint32_t o = OBJ_PROJ11_0 + (slot & 3u), x = OBJ_XTRA0 + (slot & 3u), live, link;
+    int r, had = st_tail(o, &live);
+    memcpy(&link, proj_wire5.raw + PROJ5_SIZE - 4u, 4);
+    if (had)                                          /* the slot has a FUN11 now: the extras first, for the FUN11 that follows */
+        (void)st_xtra_save(x, live, xt_fill, proj_wire5.raw);
+    r = st_save2(o, &proj_wire, sizeof proj_wire, &proj_wire5, sizeof proj_wire5);
+    if (r == 0 && !had)                               /* its first FUN11: only now are the slot's old FUN10 sectors free to take the extras */
+        (void)st_xtra_save(x, link, xt_fill, proj_wire5.raw);
+    return r ? 1 : 0;
 }
 /* the FUN11 object `obj11` into proj_wire / proj_wire5. A slot that never had one (no valid copy: a Felucca's or 5-LAB 1.0.0's
  * project) reads its FUN10 from `obj0` as before (the fifth track empty: 1.0.0's separate block is not read). Returns
@@ -1110,6 +1179,7 @@ static int proj_flash_pair_load(uint32_t obj11, uint32_t obj0, int *have5)
 {
     int r = st_load2(obj11, &proj_wire, sizeof proj_wire, &proj_wire5, sizeof proj_wire5);
     *have5 = 0;
+    proj_wire5_len = 0;
     if (r == -1) {                                    /* no FUN11 object yet: the FUN10 alone */
         memset(&proj_wire5, 0, sizeof proj_wire5);
         return st_load(obj0, &proj_wire, sizeof proj_wire);
@@ -1118,6 +1188,7 @@ static int proj_flash_pair_load(uint32_t obj11, uint32_t obj0, int *have5)
         memset(&proj_wire5, 0, sizeof proj_wire5);
         return r == 0 ? 0 : -1;
     }
+    proj_wire5_len = (uint32_t)r - sizeof proj_wire;
     *have5 = ((const uint32_t *)proj_wire.raw)[0] == PROJ_MAGIC && ((const uint32_t *)proj_wire5.raw)[0] == PROJ5_MAGIC &&
              ((const uint32_t *)proj_wire5.raw)[2] == proj_link(&proj_wire);
     return (int)PROJ_STORE_SIZE;
@@ -1148,6 +1219,12 @@ static void proj_fetch(uint32_t slot)
     if (!proj_import5(&proj_scratch, &proj_wire, n, have5 ? &proj_wire5 : 0))
         memset(q->raw, 0, 4);
     else {
+        if (have5 && proj_wire5_len == PROJ5_SIZE) {      /* 1.2.0: the slot's step extras, if they are of this FUN11 (proj_wire is free now) */
+            uint32_t link;
+            memcpy(&link, proj_wire5.raw + PROJ5_SIZE - 4u, 4);
+            int xl = st_xtra_load(OBJ_XTRA0 + (slot & 3u), link, proj_wire_u.raw, ST_PAYLOAD_MAX);
+            if (xl > 0) (void)xt_apply(&proj_scratch, proj_wire_u.raw, (uint32_t)xl);
+        }
         proj_bound(&proj_scratch);
         if (!proj_pack_pair(q, q5, &proj_scratch)) {
             memset(q->raw, 0, 4);

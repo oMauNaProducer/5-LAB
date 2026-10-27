@@ -465,6 +465,80 @@ static int autosave_test(void)
     return bad;
 }
 
+/* ---- 5-LAB 1.2.0: the step extras object (FXT1): per-note VEL / NUDGE beside the FUN11, linked to it ---- */
+static uint32_t xt_n;
+static uint32_t xt_copy(uint8_t *b, void *c) { memcpy(b, c, xt_n); return xt_n; }
+static void xt_set(int32_t nd1, uint32_t vel)
+{
+    step_t *s = &trk[1].step[3];
+    memset(s, 0, sizeof *s);
+    s->time = ST_NOTE; s->n = 2; s->note[0] = 60; s->note[1] = 64; s->vel = 100;
+    s->nv[1] = (uint8_t)vel; step_set_note_nd(s, 1, nd1);
+}
+static int xt_got(uint32_t slot, int32_t nd1, uint32_t vel)
+{
+    const step_t *s;
+    memset(proj_slot[slot].raw, 0, 8); memset(&proj_slot5[slot], 0, sizeof proj_slot5[slot]);
+    proj_fetch(slot);
+    if (!proj_import5(&proj_scratch, &proj_slot[slot], sizeof(project_store_t), &proj_slot5[slot])) return 0;
+    s = &proj_scratch.t[1].step[3];
+    return s->n == 2 && s->nv[1] == vel && s->nd[1] == nd1 && s->nv[0] == 0 && s->nd[0] == 0;
+}
+static int xt_test(void)
+{
+    int bad = 0, ok, n;
+    uint32_t i, link, w;
+    uint8_t buf[4096];
+    reset();
+    xt_set(37, 55);
+    bad += check("xtra: a save writes the slot's FUN11, then its extras (linked to the FUN11's block)",
+                 project_save(3) == 0 && st_tail(OBJ_PROJ11_0 + 3, &link) && st_xtra_load(OBJ_XTRA0 + 3, link, buf, sizeof buf) > 16);
+    bad += check("  .. one tagged record (type 1, 8 bytes, key track * 64 + step)", buf[16] == (1u << 4 | 8u) && buf[17] == 64u + 3u && buf[18] == 0 && buf[20] == 55);
+    bad += check("  .. read back from flash the step has its notes' own VEL and NUDGE", xt_got(3, 37, 55));
+    bad += check("  .. a link that is not the FUN11's gets nothing", st_xtra_load(OBJ_XTRA0 + 3, link ^ 1u, buf, sizeof buf) == 0);
+    xt_set(-20, 70);
+    bad += check("  a second save: the new values (the other copy of the extras)", project_save(3) == 0 && xt_got(3, -20, 70));
+    n = st_xtra_load(OBJ_XTRA0 + 3, 0, buf, sizeof buf);
+    st_tail(OBJ_PROJ11_0 + 3, &w);
+    n = st_xtra_load(OBJ_XTRA0 + 3, w, buf, sizeof buf);
+    buf[20] = 99; xt_n = (uint32_t)n;
+    st_xtra_save(OBJ_XTRA0 + 3, w, xt_copy, buf);
+    bad += check("  the extras of the FUN11's link are what loads (a VEL only they hold)", xt_got(3, -20, 99));
+    xt_set(-20, 70); project_save(3); st_tail(OBJ_PROJ11_0 + 3, &w);
+    n = st_xtra_load(OBJ_XTRA0 + 3, w, buf, sizeof buf);
+    w ^= 0x5A5A5A5Au; memcpy(buf + 8, &w, 4); buf[20] = 99;           /* extras (another VEL) that name some other FUN11 */
+    xt_n = (uint32_t)n;
+    st_xtra_save(OBJ_XTRA0 + 3, 0, xt_copy, buf);
+    bad += check("  extras that name another FUN11 are ignored: the project opens with the PROJ5 block's values", n > 16 && xt_got(3, -20, 70));
+    xt_set(37, 55); project_save(3);
+    ok = 1;
+    for (i = 0; i < 60u; i++) {
+        xt_set(-9, 33);
+        fail_after = (int)i;
+        (void)project_save(3);
+        fail_after = -1;
+        ok &= xt_got(3, 37, 55) || xt_got(3, -9, 33);
+        if (xt_got(3, -9, 33)) { xt_set(37, 55); project_save(3); }
+    }
+    bad += check("  a cut at any program of a save (60 points): old values or new, never lost", ok);
+    reset();
+    xt_set(5, 6);
+    {
+        project_store_t old1;
+        memset(&old1, 0, sizeof old1);
+        old1.raw[0] = 1;
+        bad += check("  (a FUN10 in slot 1's old sectors)", st_save(OBJ_PROJECT0 + 1, &old1, sizeof old1) == 0);
+        fail_after = 0;
+        (void)project_save(1);
+        fail_after = -1;
+        bad += check("  a slot without a FUN11 keeps its old FUN10 when its save fails (the extras wait for the FUN11)",
+                     st_load(OBJ_PROJECT0 + 1, &old1, sizeof old1) == (int)sizeof old1);
+        bad += check("  .. a save that works writes the FUN11 first, then the extras in those sectors",
+                     project_save(1) == 0 && st_tail(OBJ_PROJ11_0 + 1, &w) && st_xtra_load(OBJ_XTRA0 + 1, w, buf, sizeof buf) >= 16);
+    }
+    return bad;
+}
+
 int main(void)
 {
     int bad = 0, ok;
@@ -845,6 +919,7 @@ int main(void)
                   irq_races == 3u && song.playing && !transport_req && persist_pending && erases == before);
     bad += mig_test();
     bad += autosave_test();
+    bad += xt_test();
     printf("%s\n", bad ? "PERSISTENCE TEST FAILED" : "persistence test passed");
     return bad != 0;
 }
